@@ -18,6 +18,9 @@ import {
   moveCountedTimeBlocks,
   resizeCountedTimeBlock,
   updateCountedTimeBlock,
+  buildMovedTimeBlockInput,
+  buildShiftedTimeBlockInputs,
+  buildResizedTimeBlockInput,
 } from "@/features/schedule/schedule-block-service";
 import { CalendarGrid, type CalendarSelectionMode } from "@/components/base/calendar-grid";
 import { TimeBlockForm } from "@/components/base/time-block-form";
@@ -58,12 +61,23 @@ const CALENDAR_INIT: CalendarData = {
 
 type CalendarAction =
   | { type: "LOADED"; sessions: WeekSession[]; timeBlocks: TimeBlockWithMeta[] }
+  | { type: "PATCH_BLOCKS"; patches: Array<{ id: number; changes: Partial<TimeBlockWithMeta> }> }
   | { type: "ERROR" };
 
-function calendarReducer(_state: CalendarData, action: CalendarAction): CalendarData {
+function calendarReducer(state: CalendarData, action: CalendarAction): CalendarData {
   switch (action.type) {
     case "LOADED":
       return { sessions: action.sessions, timeBlocks: action.timeBlocks };
+    case "PATCH_BLOCKS": {
+      const patches = new Map(action.patches.map((patch) => [patch.id, patch.changes]));
+      return {
+        ...state,
+        timeBlocks: state.timeBlocks.map((block) => {
+          const changes = patches.get(block.id);
+          return changes ? { ...block, ...changes } : block;
+        }),
+      };
+    }
     case "ERROR":
       return { sessions: [], timeBlocks: [] };
   }
@@ -377,34 +391,53 @@ export function CalendarDashboard() {
 
   const handleMove = useCallback(
     async (block: TimeBlockWithMeta, newStart: Date) => {
-      // calendar drag step 1: Persist through the same block/session update path.
-      await moveCountedTimeBlock(block, newStart);
-
-      // calendar drag step 2: Reload the visible week from the canonical DB state.
-      reload();
+      const input = buildMovedTimeBlockInput(block, newStart);
+      // Paint the snapped result immediately. The database remains canonical;
+      // a failed write rolls back by reloading the week.
+      dispatch({ type: "PATCH_BLOCKS", patches: [{
+        id: block.id,
+        changes: { start_time: input.start_time, end_time: input.end_time },
+      }] });
+      try {
+        await moveCountedTimeBlock(block, newStart);
+      } catch (error) {
+        reload();
+        throw error;
+      }
     },
     [reload],
   );
 
   const handleMoveBlocks = useCallback(
     async (blocks: TimeBlockWithMeta[], deltaMs: number) => {
-      // group move step 1: The grid supplies one shared snapped delta, so the
-      // service can preserve all selected durations and relative spacing.
-      await moveCountedTimeBlocks(blocks, deltaMs);
-
-      // group move step 2: Keep the ids selected after canonical data reload.
-      reload();
+      const shifted = buildShiftedTimeBlockInputs(blocks, deltaMs);
+      dispatch({ type: "PATCH_BLOCKS", patches: shifted.map(({ block, input }) => ({
+        id: block.id,
+        changes: { start_time: input.start_time, end_time: input.end_time },
+      })) });
+      try {
+        await moveCountedTimeBlocks(blocks, deltaMs);
+      } catch (error) {
+        reload();
+        throw error;
+      }
     },
     [reload],
   );
 
   const handleResize = useCallback(
     async (block: TimeBlockWithMeta, newEnd: Date) => {
-      // calendar resize step 1: Persist through the same block/session path as edits.
-      await resizeCountedTimeBlock(block, newEnd);
-
-      // calendar resize step 2: Reload geometry and today's tag analytics source.
-      reload();
+      const input = buildResizedTimeBlockInput(block, newEnd);
+      dispatch({ type: "PATCH_BLOCKS", patches: [{
+        id: block.id,
+        changes: { end_time: input.end_time },
+      }] });
+      try {
+        await resizeCountedTimeBlock(block, newEnd);
+      } catch (error) {
+        reload();
+        throw error;
+      }
     },
     [reload],
   );

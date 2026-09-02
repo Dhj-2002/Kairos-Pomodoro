@@ -538,6 +538,7 @@ interface BlockDragGesture {
   originX: number;
   originY: number;
   active: boolean;
+  bodyRect: DOMRect | null;
 }
 
 interface BlockDragPreview {
@@ -604,6 +605,9 @@ function CalendarDesktopView({
   const marqueeGestureRef = useRef<MarqueeGesture | null>(null);
   const marqueeRef = useRef<MarqueeVisual | null>(null);
   const suppressClickBlockIdRef = useRef<number | null>(null);
+  const suppressGridClickUntilRef = useRef(0);
+  const dragFrameRef = useRef<number | null>(null);
+  const pendingDragPointRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
   const suppressMarqueeClickRef = useRef(false);
   const [dragPreview, setDragPreview] = useState<BlockDragState | null>(null);
   const [resizePreview, setResizePreview] = useState<BlockResizePreview | null>(null);
@@ -623,7 +627,9 @@ function CalendarDesktopView({
     // block drag step 1: Resolve the horizontal coordinate to a visible day.
     const body = calendarBodyRef.current;
     if (!body || weekDays.length === 0) return null;
-    const rect = body.getBoundingClientRect();
+    // Cache the body geometry at pointer-down. Reading layout on every pointer
+    // event causes synchronous WebKit reflow and makes Intel Macs feel sticky.
+    const rect = dragGestureRef.current?.bodyRect ?? body.getBoundingClientRect();
     const timeAxisWidth = 64;
     const dayWidth = (rect.width - timeAxisWidth) / weekDays.length;
     const relativeX = Math.max(0, clientX - rect.left - timeAxisWidth);
@@ -657,6 +663,7 @@ function CalendarDesktopView({
       originX: event.clientX,
       originY: event.clientY,
       active: false,
+      bodyRect: calendarBodyRef.current?.getBoundingClientRect() ?? null,
     };
     dragPreviewRef.current = null;
     setDragPreview(null);
@@ -694,11 +701,34 @@ function CalendarDesktopView({
     return { anchor: anchorPreview, previews, blocks, deltaMs };
   };
 
+  const updateBlockDragPreview = (pointerId: number, clientX: number, clientY: number) => {
+    const gesture = dragGestureRef.current;
+    if (!gesture || gesture.pointerId !== pointerId) return;
+
+    // block drag step 2: A six-pixel threshold keeps ordinary clicks intact.
+    if (!gesture.active && !exceedsBlockDragThreshold(
+      gesture.originX,
+      gesture.originY,
+      clientX,
+      clientY,
+    )) return;
+
+    gesture.active = true;
+    setHoveredSlot(null);
+    const preview = resolveDragPreview(gesture.block, clientX, clientY);
+    const state = preview ? buildDragState(preview, gesture.block) : null;
+    const previous = dragPreviewRef.current;
+    dragPreviewRef.current = state;
+    // A 15-minute snapped slot changes far less often than pointer coordinates.
+    // Do not re-render the complete week while the pointer remains in one slot.
+    if (previous?.deltaMs !== state?.deltaMs || previous?.blocks.length !== state?.blocks.length) {
+      setDragPreview(state);
+    }
+  };
+
   const handleBlockDragMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = dragGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
-
-    // block drag step 2: A six-pixel threshold keeps ordinary clicks intact.
     if (!gesture.active && !exceedsBlockDragThreshold(
       gesture.originX,
       gesture.originY,
@@ -708,16 +738,33 @@ function CalendarDesktopView({
 
     gesture.active = true;
     event.preventDefault();
-    setHoveredSlot(null);
-    const preview = resolveDragPreview(gesture.block, event.clientX, event.clientY);
-    const state = preview ? buildDragState(preview, gesture.block) : null;
-    dragPreviewRef.current = state;
-    setDragPreview(state);
+    pendingDragPointRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+    if (dragFrameRef.current !== null) return;
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      const point = pendingDragPointRef.current;
+      pendingDragPointRef.current = null;
+      if (point) updateBlockDragPreview(point.pointerId, point.clientX, point.clientY);
+    });
   };
 
   const handleBlockDragEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = dragGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragPointRef.current = null;
+    // Flush the release coordinate so a fast drag commits the visible target,
+    // even when pointer-up arrives before the next animation frame.
+    if (gesture.active && event.type !== "pointercancel") {
+      updateBlockDragPreview(event.pointerId, event.clientX, event.clientY);
+    }
     const preview = dragPreviewRef.current;
     const shouldCommit = gesture.active && event.type !== "pointercancel" && preview !== null;
 
@@ -726,6 +773,7 @@ function CalendarDesktopView({
     if (gesture.active) {
       event.preventDefault();
       suppressClickBlockIdRef.current = gesture.block.id;
+      suppressGridClickUntilRef.current = Date.now() + 400;
       window.setTimeout(() => {
         if (suppressClickBlockIdRef.current === gesture.block.id) {
           suppressClickBlockIdRef.current = null;
@@ -828,7 +876,7 @@ function CalendarDesktopView({
   };
 
   const handleBlockView = (block: TimeBlockWithMeta) => {
-    if (suppressClickBlockIdRef.current === block.id || suppressMarqueeClickRef.current) return;
+    if (suppressClickBlockIdRef.current === block.id || suppressMarqueeClickRef.current || Date.now() < suppressGridClickUntilRef.current) return;
     onViewBlock?.(block);
   };
 
@@ -927,7 +975,7 @@ function CalendarDesktopView({
       </div>
 
       <div className="flex-1 overflow-y-auto relative">
-        <div ref={calendarBodyRef} className="grid" style={{ gridTemplateColumns: `64px repeat(${weekDays.length}, 1fr)`, minHeight: desktopGridTotalHeight }}>
+        <div ref={calendarBodyRef} className="grid select-none" style={{ gridTemplateColumns: `64px repeat(${weekDays.length}, 1fr)`, minHeight: desktopGridTotalHeight, WebkitUserSelect: "none" }}>
           <div className="border-r border-sahara-border/20 bg-sahara-bg/30 relative shrink-0 w-16">
             {hours.map((hour, hIdx) => {
               // Rows are uniform across all columns (see computeDayLayout), so
@@ -972,6 +1020,11 @@ function CalendarDesktopView({
                 onPointerLeave={() => setHoveredSlot(null)}
                 onClick={(e) => {
                   if (suppressMarqueeClickRef.current) return;
+                  if (Date.now() < suppressGridClickUntilRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
                   if (!onCreateBlock) return;
                   const target = e.currentTarget.getBoundingClientRect();
                   const y = e.clientY - target.top;
@@ -1039,7 +1092,7 @@ function CalendarDesktopView({
                   .map((preview) => (
                     <div
                       key={`drag-${preview.block.id}`}
-                      className="absolute left-1 right-1 z-50 pointer-events-none rounded-lg border-2 border-dashed bg-sahara-bg/80 px-2 py-1.5 shadow-lg backdrop-blur-sm"
+                      className="absolute left-1 right-1 z-50 pointer-events-none rounded-lg border-2 border-dashed bg-sahara-bg px-2 py-1.5 shadow-sm"
                       style={{
                         top: preview.topPx,
                         height: preview.heightPx,

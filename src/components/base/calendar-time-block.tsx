@@ -87,7 +87,7 @@ export function CalendarTimeBlock({
     <div
       data-calendar-block-id={block.id}
       className={cn(
-        "absolute left-0 z-20 group",
+        "absolute left-0 z-20 group select-none",
         onDragStart ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         (isDragging || isResizing) && "opacity-30",
       )}
@@ -104,6 +104,7 @@ export function CalendarTimeBlock({
         paddingRight: 4,
         zIndex: 20 + stackIndex,
         touchAction: onDragStart ? "none" : undefined,
+        WebkitUserSelect: "none",
       }}
       onPointerDown={(event) => {
         if (!onDragStart || event.button !== 0) return;
