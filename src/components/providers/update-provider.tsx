@@ -256,7 +256,7 @@ export function UpdateProvider({ children }: UpdateProviderProps) {
                 className="gap-1.5 text-[10px] flex-1"
               >
                 <Download className="size-3" />
-                {downloading ? "Downloading…" : installError ? "Retry Update" : "Install Update"}
+                {downloading ? "Updating…" : installError ? "Retry Update" : "Update and Restart"}
               </Button>
               <Button
                 variant="outline"

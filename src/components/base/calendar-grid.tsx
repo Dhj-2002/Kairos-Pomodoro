@@ -7,7 +7,11 @@ import { CalendarSessionBlock } from "./calendar-session-block";
 import { CalendarTimeBlock } from "./calendar-time-block";
 import { CalendarDayPill } from "./calendar-day-pill";
 import { selectionRectsIntersect } from "@/features/schedule/calendar-selection";
-import { snapCalendarResizeEnd } from "@/features/schedule/calendar-resize";
+import {
+  snapCalendarResizeEnd,
+  snapCalendarResizeStart,
+  type CalendarResizeEdge,
+} from "@/features/schedule/calendar-resize";
 import { parseDbDateTime } from "@/lib/time";
 
 export type CalendarSelectionMode = "range" | "toggle";
@@ -28,8 +32,8 @@ interface CalendarGridProps {
   onDeleteBlock?: (block: TimeBlockWithMeta) => void;
   /** Called after a desktop drag selects a new 15-minute-snapped start. */
   onMoveBlock?: (block: TimeBlockWithMeta, newStart: Date) => void | Promise<void>;
-  /** Called after the bottom edge selects a 15-minute-snapped end. */
-  onResizeBlock?: (block: TimeBlockWithMeta, newEnd: Date) => void | Promise<void>;
+  /** Called after either edge selects a 15-minute-snapped boundary. */
+  onResizeBlock?: (block: TimeBlockWithMeta, edge: CalendarResizeEdge, boundary: Date) => void | Promise<void>;
   /** Current desktop multi-selection, owned by the Calendar container. */
   selectedBlockIds?: ReadonlySet<number>;
   /** Called by Shift+click or Ctrl+click on an existing block. */
@@ -525,7 +529,7 @@ interface CalendarDesktopViewProps {
   onEditBlock?: (block: TimeBlockWithMeta) => void;
   onDeleteBlock?: (block: TimeBlockWithMeta) => void;
   onMoveBlock?: (block: TimeBlockWithMeta, newStart: Date) => void | Promise<void>;
-  onResizeBlock?: (block: TimeBlockWithMeta, newEnd: Date) => void | Promise<void>;
+  onResizeBlock?: (block: TimeBlockWithMeta, edge: CalendarResizeEdge, boundary: Date) => void | Promise<void>;
   selectedBlockIds: ReadonlySet<number>;
   onSelectBlock?: (block: TimeBlockWithMeta, mode: CalendarSelectionMode) => void;
   onSelectBlocks?: (blockIds: number[]) => void;
@@ -558,6 +562,7 @@ interface BlockDragState {
 
 interface BlockResizeGesture {
   block: TimeBlockWithMeta;
+  edge: CalendarResizeEdge;
   pointerId: number;
   originY: number;
   active: boolean;
@@ -566,6 +571,8 @@ interface BlockResizeGesture {
 interface BlockResizePreview {
   block: TimeBlockWithMeta;
   dayIndex: number;
+  edge: CalendarResizeEdge;
+  newStart: Date;
   newEnd: Date;
   topPx: number;
   heightPx: number;
@@ -794,9 +801,10 @@ function CalendarDesktopView({
     setDragPreview(null);
   };
 
-  /** Resolve a bottom-edge pointer to a same-day quarter-hour end time. */
+  /** Resolve either resize edge to a same-day snapped boundary. */
   const resolveResizePreview = (
     block: TimeBlockWithMeta,
+    edge: CalendarResizeEdge,
     clientY: number,
   ): BlockResizePreview | null => {
     // resize preview step 1: Keep resizing in the block's visible day column.
@@ -811,17 +819,21 @@ function CalendarDesktopView({
     const layout = allDayLayouts[dayIndex];
     const y = Math.max(0, Math.min(clientY - rect.top, layout.totalHeight));
     const rawOffsetMinutes = (y / BASE_HOUR_HEIGHT) * 60;
-    const proposedEnd = new Date(weekDays[dayIndex]);
-    proposedEnd.setHours(hours[0], 0, 0, 0);
-    proposedEnd.setMinutes(proposedEnd.getMinutes() + rawOffsetMinutes);
-    const newEnd = snapCalendarResizeEnd(start, proposedEnd);
+    const proposedBoundary = new Date(weekDays[dayIndex]);
+    proposedBoundary.setHours(hours[0], 0, 0, 0);
+    proposedBoundary.setMinutes(proposedBoundary.getMinutes() + rawOffsetMinutes);
+    const storedEnd = parseDbDateTime(block.end_time);
+    const newStart = edge === "start" ? snapCalendarResizeStart(storedEnd, proposedBoundary) : start;
+    const newEnd = edge === "end" ? snapCalendarResizeEnd(start, proposedBoundary) : storedEnd;
 
     // resize preview step 3: Preserve the stored start and preview only height.
-    const startMinutes = (start.getHours() - hours[0]) * 60 + start.getMinutes();
-    const durationMinutes = (newEnd.getTime() - start.getTime()) / 60_000;
+    const startMinutes = (newStart.getHours() - hours[0]) * 60 + newStart.getMinutes();
+    const durationMinutes = (newEnd.getTime() - newStart.getTime()) / 60_000;
     return {
       block,
       dayIndex,
+      edge,
+      newStart,
       newEnd,
       topPx: (startMinutes / 60) * BASE_HOUR_HEIGHT,
       heightPx: Math.max((durationMinutes / 60) * BASE_HOUR_HEIGHT, MIN_BLOCK_HEIGHT),
@@ -830,11 +842,13 @@ function CalendarDesktopView({
 
   const handleBlockResizeStart = (
     block: TimeBlockWithMeta,
+    edge: CalendarResizeEdge,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
     // resize gesture step 1: Record the edge gesture without entering move mode.
     resizeGestureRef.current = {
       block,
+      edge,
       pointerId: event.pointerId,
       originY: event.clientY,
       active: false,
@@ -852,7 +866,7 @@ function CalendarDesktopView({
     gesture.active = true;
     event.preventDefault();
     setHoveredSlot(null);
-    const preview = resolveResizePreview(gesture.block, event.clientY);
+    const preview = resolveResizePreview(gesture.block, gesture.edge, event.clientY);
     resizePreviewRef.current = preview;
     setResizePreview(preview);
   };
@@ -861,12 +875,30 @@ function CalendarDesktopView({
     const gesture = resizeGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const preview = resizePreviewRef.current;
+    const originalBoundary = parseDbDateTime(
+      gesture.edge === "start" ? gesture.block.start_time : gesture.block.end_time,
+    );
+    const nextBoundary = preview
+      ? (gesture.edge === "start" ? preview.newStart : preview.newEnd)
+      : null;
     const shouldCommit = gesture.active && event.type !== "pointercancel" && preview !== null
-      && preview.newEnd.getTime() !== parseDbDateTime(gesture.block.end_time).getTime();
+      && nextBoundary?.getTime() !== originalBoundary.getTime();
+
+    if (gesture.active) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickBlockIdRef.current = gesture.block.id;
+      suppressGridClickUntilRef.current = Date.now() + 400;
+      window.setTimeout(() => {
+        if (suppressClickBlockIdRef.current === gesture.block.id) {
+          suppressClickBlockIdRef.current = null;
+        }
+      }, 0);
+    }
 
     // resize gesture step 3: Persist only a changed, valid snapped end.
     if (shouldCommit) {
-      void Promise.resolve(onResizeBlock?.(gesture.block, preview.newEnd)).catch((error) => {
+      void Promise.resolve(onResizeBlock?.(gesture.block, gesture.edge, nextBoundary!)).catch((error) => {
         console.error("[Calendar] Failed to resize time block:", error);
       });
     }
@@ -1120,7 +1152,7 @@ function CalendarDesktopView({
                       {resizePreview.block.title || resizePreview.block.task_name || resizePreview.block.category_name || "Focus block"}
                     </p>
                     <p className="mt-0.5 text-[9px] tabular-nums text-sahara-text-muted">
-                      until {String(resizePreview.newEnd.getHours()).padStart(2, "0")}:{String(resizePreview.newEnd.getMinutes()).padStart(2, "0")}
+                      {String(resizePreview.newStart.getHours()).padStart(2, "0")}:{String(resizePreview.newStart.getMinutes()).padStart(2, "0")} – {String(resizePreview.newEnd.getHours()).padStart(2, "0")}:{String(resizePreview.newEnd.getMinutes()).padStart(2, "0")}
                     </p>
                   </div>
                 )}

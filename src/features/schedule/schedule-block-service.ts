@@ -20,7 +20,11 @@ import {
 } from "@/lib/db";
 import type Database from "@tauri-apps/plugin-sql";
 import { UNTAGGED_BLOCK_COLOR } from "@/lib/constants";
-import { snapCalendarResizeEnd } from "@/features/schedule/calendar-resize";
+import {
+  snapCalendarResizeEnd,
+  snapCalendarResizeStart,
+  type CalendarResizeEdge,
+} from "@/features/schedule/calendar-resize";
 import { parseDbDateTime } from "@/lib/time";
 
 export type TemplateConflictMode = "keep" | "replace" | "append";
@@ -186,20 +190,22 @@ export async function moveCountedTimeBlock(
   return updateCountedTimeBlock(block, input);
 }
 
-/** Resize one counted block from its bottom edge while preserving its start and metadata. */
+/** Resize one counted block from either edge while preserving its metadata. */
 export function buildResizedTimeBlockInput(
   block: TimeBlockWithMeta,
-  proposedEnd: Date,
+  edge: CalendarResizeEdge,
+  proposedBoundary: Date,
 ): TimeBlockInput {
-  // resize block step 1: Enforce the shared 15-minute grid and minimum duration.
   const start = parseDbDateTime(block.start_time);
-  const newEnd = snapCalendarResizeEnd(start, proposedEnd);
+  const end = parseDbDateTime(block.end_time);
+  const newStart = edge === "start" ? snapCalendarResizeStart(end, proposedBoundary) : start;
+  const newEnd = edge === "end" ? snapCalendarResizeEnd(start, proposedBoundary) : end;
 
   // resize block step 2: Reuse the canonical edit payload so analytics and
   // reminder/template provenance stay synchronized with the visual block.
   return {
     title: block.title,
-    start_time: block.start_time,
+    start_time: toLocalDateTime(newStart),
     end_time: toLocalDateTime(newEnd),
     task_id: block.task_id,
     category_id: block.category_id,
@@ -210,13 +216,13 @@ export function buildResizedTimeBlockInput(
   };
 }
 
-/** Persist one bottom-edge resize through the canonical counted-block update. */
+/** Persist an edge resize through the canonical counted-block update. */
 export async function resizeCountedTimeBlock(
   block: TimeBlockWithMeta,
-  proposedEnd: Date,
+  edge: CalendarResizeEdge,
+  proposedBoundary: Date,
 ): Promise<number> {
-  // resize block step 1: Build the snapped duration-changing edit.
-  const input = buildResizedTimeBlockInput(block, proposedEnd);
+  const input = buildResizedTimeBlockInput(block, edge, proposedBoundary);
 
   // resize block step 2: Synchronize both the calendar row and analytics row.
   return updateCountedTimeBlock(block, input);

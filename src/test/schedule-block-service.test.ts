@@ -109,14 +109,21 @@ describe("schedule block conversion", () => {
       category_color: "#123456",
     } satisfies TimeBlockWithMeta;
 
-    const longer = buildResizedTimeBlockInput(block, new Date(2026, 7, 22, 9, 8));
+    const longer = buildResizedTimeBlockInput(block, "end", new Date(2026, 7, 22, 9, 8));
     expect(longer.start_time).toBe("2026-08-22 08:00:00");
     expect(longer.end_time).toBe("2026-08-22 09:15:00");
     expect(longer.category_id).toBe(3);
     expect(longer.source_template_id).toBe(4);
 
-    const minimum = buildResizedTimeBlockInput(block, new Date(2026, 7, 22, 7, 0));
+    const minimum = buildResizedTimeBlockInput(block, "end", new Date(2026, 7, 22, 7, 0));
     expect(minimum.end_time).toBe("2026-08-22 08:15:00");
+
+    const earlierStart = buildResizedTimeBlockInput(block, "start", new Date(2026, 7, 22, 7, 37));
+    expect(earlierStart.start_time).toBe("2026-08-22 07:30:00");
+    expect(earlierStart.end_time).toBe("2026-08-22 08:30:00");
+
+    const latestStart = buildResizedTimeBlockInput(block, "start", new Date(2026, 7, 22, 9, 0));
+    expect(latestStart.start_time).toBe("2026-08-22 08:15:00");
   });
 
   it("builds a consecutive sequence from the clicked slot across midnight", () => {

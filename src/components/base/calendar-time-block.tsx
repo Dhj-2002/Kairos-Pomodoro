@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { MIN_BLOCK_HEIGHT } from "./calendar-grid";
 import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
 import { formatTime24Hour } from "@/lib/time";
+import type { CalendarResizeEdge } from "@/features/schedule/calendar-resize";
 
 interface CalendarTimeBlockProps {
   block: TimeBlockWithMeta;
@@ -23,7 +24,7 @@ interface CalendarTimeBlockProps {
   onDragStart?: (block: TimeBlockWithMeta, event: ReactPointerEvent<HTMLDivElement>) => void;
   onDragMove?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onDragEnd?: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onResizeStart?: (block: TimeBlockWithMeta, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onResizeStart?: (block: TimeBlockWithMeta, edge: CalendarResizeEdge, event: ReactPointerEvent<HTMLButtonElement>) => void;
   onResizeMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onResizeEnd?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   isDragging?: boolean;
@@ -79,6 +80,49 @@ export function CalendarTimeBlock({
   // counts toward stats — render it solid (like a completed session) instead
   // of dashed, and drop the "start focus" action.
   const isLogged = block.session_id != null;
+
+  const resizeHandle = (edge: CalendarResizeEdge) => onResizeStart && (
+    <button
+      type="button"
+      data-block-action
+      aria-label={`Resize ${label} from ${edge}`}
+      title={`Drag ${edge} edge to resize in 15-minute steps`}
+      className={cn(
+        "absolute left-2 right-2 z-40 h-2 cursor-ns-resize touch-none",
+        edge === "start" ? "top-0" : "bottom-0",
+      )}
+      style={edge === "start" ? { top: visualInsetY } : { bottom: visualInsetY }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onResizeStart(block, edge, event);
+      }}
+      onPointerMove={(event) => {
+        event.stopPropagation();
+        onResizeMove?.(event);
+      }}
+      onPointerUp={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onResizeEnd?.(event);
+      }}
+      onPointerCancel={(event) => {
+        event.stopPropagation();
+        onResizeEnd?.(event);
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <span className={cn(
+        "absolute left-1/2 h-0.5 w-7 -translate-x-1/2 rounded-full bg-current opacity-0 transition-opacity group-hover:opacity-45",
+        edge === "start" ? "top-0.5" : "bottom-0.5",
+      )} />
+    </button>
+  );
 
   return (
     <div
@@ -223,42 +267,8 @@ export function CalendarTimeBlock({
         </div>
       </div>
 
-      {onResizeStart && (
-        <button
-          type="button"
-          data-block-action
-          aria-label={`Resize ${label}`}
-          title="Drag to resize in 15-minute steps"
-          className="absolute bottom-0 left-2 right-2 z-40 h-2 cursor-ns-resize touch-none"
-          style={{ bottom: visualInsetY }}
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            // resize handle step 1: Own this gesture so the block body cannot move.
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            onResizeStart(block, event);
-          }}
-          onPointerMove={(event) => {
-            event.stopPropagation();
-            onResizeMove?.(event);
-          }}
-          onPointerUp={(event) => {
-            event.stopPropagation();
-            onResizeEnd?.(event);
-          }}
-          onPointerCancel={(event) => {
-            event.stopPropagation();
-            onResizeEnd?.(event);
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-        >
-          <span className="absolute bottom-0.5 left-1/2 h-0.5 w-7 -translate-x-1/2 rounded-full bg-current opacity-0 transition-opacity group-hover:opacity-45" />
-        </button>
-      )}
+      {resizeHandle("start")}
+      {resizeHandle("end")}
     </div>
   );
 }

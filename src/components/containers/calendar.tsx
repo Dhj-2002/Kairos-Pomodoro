@@ -426,14 +426,14 @@ export function CalendarDashboard() {
   );
 
   const handleResize = useCallback(
-    async (block: TimeBlockWithMeta, newEnd: Date) => {
-      const input = buildResizedTimeBlockInput(block, newEnd);
+    async (block: TimeBlockWithMeta, edge: "start" | "end", boundary: Date) => {
+      const input = buildResizedTimeBlockInput(block, edge, boundary);
       dispatch({ type: "PATCH_BLOCKS", patches: [{
         id: block.id,
-        changes: { end_time: input.end_time },
+        changes: { start_time: input.start_time, end_time: input.end_time },
       }] });
       try {
-        await resizeCountedTimeBlock(block, newEnd);
+        await resizeCountedTimeBlock(block, edge, boundary);
       } catch (error) {
         reload();
         throw error;
