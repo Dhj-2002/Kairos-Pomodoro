@@ -5,6 +5,7 @@ import {
   getPhaseBg,
   getPhaseLabel,
   formatTimeAmPm,
+  formatTime24Hour,
 } from "@/lib/time";
 
 describe("formatSeconds", () => {
@@ -30,6 +31,17 @@ describe("formatSeconds", () => {
 
   it("formats large values", () => {
     expect(formatSeconds(3661)).toBe("61:01");
+  });
+});
+
+describe("formatTime24Hour", () => {
+  it("formats SQLite local timestamps on Safari-compatible parsing", () => {
+    expect(formatTime24Hour("2026-09-03 08:05:00")).toBe("08:05");
+    expect(formatTime24Hour("2026-09-03 19:45:00")).toBe("19:45");
+  });
+
+  it("never exposes NaN for malformed stored values", () => {
+    expect(formatTime24Hour("broken")).toBe("--:--");
   });
 });
 

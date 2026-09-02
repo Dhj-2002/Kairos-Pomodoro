@@ -7,6 +7,7 @@ import { formatTimeAmPm } from "@/lib/time";
 import type { SessionMood } from "@/features/timer/timer-types";
 export type { SessionMood } from "@/features/timer/timer-types";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { formatMinutesAsDuration } from "@/lib/session-utils";
 
 interface MoodOption {
   id: SessionMood;
@@ -163,7 +164,7 @@ export function FinishSessionModal({
               Focus
             </span>
             <span className="text-sm font-medium text-sahara-text tabular-nums">
-              {durationMinutes}min
+              {formatMinutesAsDuration(durationMinutes)}
             </span>
             <ArrowRight className="size-3.5 text-sahara-text-muted ml-auto opacity-40" />
           </div>

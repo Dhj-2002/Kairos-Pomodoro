@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Button } from "@/components/ui/button";
+import { formatMinutesAsDuration } from "@/lib/session-utils";
 
 interface CalendarBatchDeleteModalProps {
   open: boolean;
@@ -10,14 +11,6 @@ interface CalendarBatchDeleteModalProps {
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
-}
-
-function formatDuration(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes} min`;
-  if (minutes === 0) return `${hours} h`;
-  return `${hours} h ${minutes} min`;
 }
 
 /** Confirm Ctrl+D deletion for the current calendar selection. This dialog
@@ -41,7 +34,7 @@ export function CalendarBatchDeleteModal({
           <div>
             <h2 className="font-serif text-xl text-sahara-text">Delete selected blocks?</h2>
             <p className="mt-1 text-sm text-sahara-text-secondary">
-              {count} block{count === 1 ? "" : "s"} · {formatDuration(durationMinutes)}
+              {count} block{count === 1 ? "" : "s"} · {formatMinutesAsDuration(durationMinutes)}
             </p>
           </div>
         </div>

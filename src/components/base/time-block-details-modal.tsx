@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { TimeBlockWithMeta } from "@/lib/db";
 import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
 import { parseDbDateTime } from "@/lib/time";
+import { formatMinutesAsDuration } from "@/lib/session-utils";
 
 interface TimeBlockDetailsModalProps {
   block: TimeBlockWithMeta | null;
@@ -89,7 +90,7 @@ export function TimeBlockDetailsModal({
                 Duration
               </p>
               <p className="text-sm text-sahara-text">
-                {durationMinutes} minutes · {start.time} – {end.time}
+                {formatMinutesAsDuration(durationMinutes)} · {start.time} – {end.time}
               </p>
             </div>
           </div>

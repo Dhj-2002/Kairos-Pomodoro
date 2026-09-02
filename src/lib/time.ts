@@ -28,6 +28,14 @@ export function parseDbDateTime(value: string): Date {
   return new Date(value);
 }
 
+/** Format a persisted calendar timestamp without relying on Safari/WebKit's
+ * unsupported parsing of SQLite's `YYYY-MM-DD HH:mm:ss` representation. */
+export function formatTime24Hour(value: string): string {
+  const date = parseDbDateTime(value);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export function formatSeconds(totalSeconds: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;

@@ -217,7 +217,7 @@ export function SequenceTemplateManager({ open, onClose }: SequenceTemplateManag
                       className="min-w-[92px] rounded-xl px-4 py-3 text-left text-white shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
                       style={{ backgroundColor: block.category_color || UNTAGGED_BLOCK_COLOR }}
                     >
-                      <span className="block text-sm font-bold">{block.duration_minutes}m</span>
+                      <span className="block text-sm font-bold">{formatMinutesAsDuration(block.duration_minutes)}</span>
                       <span className="block max-w-[110px] truncate text-[10px] opacity-90">{block.name}</span>
                       <span className="block max-w-[110px] truncate text-[9px] opacity-75">{block.category_name || "No tag"}</span>
                     </button>
@@ -309,7 +309,7 @@ export function SequenceTemplateManager({ open, onClose }: SequenceTemplateManag
                       >
                         <GripVertical className="size-3.5 opacity-65" />
                         <span>
-                          <span className="block text-xs font-bold">{item.duration_minutes}m</span>
+                          <span className="block text-xs font-bold">{formatMinutesAsDuration(item.duration_minutes)}</span>
                           <span className="block max-w-24 truncate text-[9px] opacity-85">{item.title}</span>
                           <span className="block max-w-24 truncate text-[8px] opacity-70">{item.category_name || "No tag"}</span>
                         </span>

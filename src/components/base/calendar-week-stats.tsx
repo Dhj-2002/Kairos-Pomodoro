@@ -1,16 +1,10 @@
 import { Flame, Clock, Target, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { WeekSummary } from "@/lib/db";
+import { formatTotalTime } from "@/lib/session-utils";
 
 interface CalendarWeekStatsProps {
   summary: WeekSummary;
-}
-
-function formatHours(sec: number): string {
-  if (sec === 0) return "0h";
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 export function CalendarWeekStats({ summary }: CalendarWeekStatsProps) {
@@ -18,7 +12,7 @@ export function CalendarWeekStats({ summary }: CalendarWeekStatsProps) {
     {
       icon: Clock,
       label: "Total Focus",
-      value: formatHours(summary.total_seconds),
+      value: formatTotalTime(summary.total_seconds),
       color: "text-sahara-primary",
       bg: "bg-sahara-primary-light",
     },
@@ -32,7 +26,7 @@ export function CalendarWeekStats({ summary }: CalendarWeekStatsProps) {
     {
       icon: Flame,
       label: "Daily Avg",
-      value: formatHours(summary.avg_daily_seconds),
+      value: formatTotalTime(summary.avg_daily_seconds),
       color: "text-sahara-primary",
       bg: "bg-sahara-primary-light",
     },
@@ -40,7 +34,7 @@ export function CalendarWeekStats({ summary }: CalendarWeekStatsProps) {
       icon: TrendingUp,
       label: "Peak Day",
       value: summary.peak_day
-        ? `${new Date(summary.peak_day + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} (${formatHours(summary.peak_day_seconds)})`
+        ? `${new Date(summary.peak_day + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} (${formatTotalTime(summary.peak_day_seconds)})`
         : "—",
       color: "text-emerald-600 dark:text-emerald-400",
       bg: "bg-emerald-50 dark:bg-emerald-950/30",

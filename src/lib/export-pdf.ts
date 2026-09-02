@@ -61,7 +61,6 @@ function addSectionTitle(doc: jsPDF, title: string, y: number): number {
 }
 
 function formatDurationPdf(seconds: number): string {
-  if (seconds <= 0) return "0m";
   return formatTotalTime(seconds);
 }
 
@@ -96,8 +95,8 @@ export async function exportAnalyticsPdf(period: DatePeriod): Promise<void> {
   const stats = [
     { label: "Total Focus", value: formatDurationPdf(totalFocusSec) },
     { label: "Sessions", value: String(totalSessions) },
-    { label: "Avg Session", value: avgSessionSec > 0 ? formatDuration(avgSessionSec) : "0m" },
-    { label: "Daily Avg", value: avgDailySec > 0 ? formatDurationPdf(avgDailySec) : "0m" },
+    { label: "Avg Session", value: formatDuration(avgSessionSec) },
+    { label: "Daily Avg", value: formatDurationPdf(avgDailySec) },
   ];
 
   const statBoxWidth = contentWidth / 4 - 2;

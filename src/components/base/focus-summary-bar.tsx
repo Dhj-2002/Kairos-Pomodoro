@@ -109,7 +109,7 @@ export function FocusSummaryBar({
 
       <StatBox 
         label="Avg Focus" 
-        value={sessionCount > 0 ? formatTotalTime(Math.round(totalFocusSec / sessionCount)) : "0m"} 
+        value={formatTotalTime(sessionCount > 0 ? Math.round(totalFocusSec / sessionCount) : 0)}
         icon={Timer} 
         styleKey="timer" 
       />

@@ -3,6 +3,7 @@ import { useTimerStore } from "@/features/timer/use-timer-store";
 import { SliderField } from "@/components/base/slider-field";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
+import { formatMinutesAsDuration } from "@/lib/session-utils";
 
 export function SettingsPanel() {
   const settings = useSettingsStore((s) => s.settings);
@@ -18,7 +19,7 @@ export function SettingsPanel() {
     setDurations(s.workDuration, s.shortBreakDuration, s.longBreakDuration);
   };
 
-  const formatMin = (sec: number) => `${Math.round(sec / 60)} min`;
+  const formatMin = (sec: number) => formatMinutesAsDuration(sec / 60);
 
   return (
     <div className="flex flex-col gap-6 py-4">

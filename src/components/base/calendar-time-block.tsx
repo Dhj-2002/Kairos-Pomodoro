@@ -7,6 +7,7 @@ import type { TimeBlockWithMeta } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { MIN_BLOCK_HEIGHT } from "./calendar-grid";
 import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
+import { formatTime24Hour } from "@/lib/time";
 
 interface CalendarTimeBlockProps {
   block: TimeBlockWithMeta;
@@ -31,11 +32,7 @@ interface CalendarTimeBlockProps {
 }
 
 function formatRange(startStr: string, endStr: string): string {
-  const fmt = (s: string) => {
-    const d = new Date(s);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  };
-  return `${fmt(startStr)} – ${fmt(endStr)}`;
+  return `${formatTime24Hour(startStr)} – ${formatTime24Hour(endStr)}`;
 }
 
 /** Preserve time geometry while giving the visible card proportional breathing room. */

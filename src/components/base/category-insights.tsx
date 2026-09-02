@@ -104,12 +104,12 @@ function CategoryMetricCard({ category }: { category: CategoryAnalytics }) {
     {
       label: "Avg Session",
       icon: TrendingUp,
-      value: category.avg_session_seconds > 0 ? formatDuration(category.avg_session_seconds) : "0m",
+      value: formatDuration(category.avg_session_seconds),
     },
     {
       label: "Daily Avg",
       icon: BarChart3,
-      value: category.daily_avg_seconds > 0 ? formatTotalTime(category.daily_avg_seconds) : "0m",
+      value: formatTotalTime(category.daily_avg_seconds),
     },
   ];
 

@@ -186,12 +186,12 @@ export function AnalyticsDashboard({ period: externalPeriod, onPeriodChange }: A
           />
           <StatCard
             label="Avg Session"
-            value={avgSessionSec > 0 ? formatDuration(avgSessionSec) : "0m"}
+            value={formatDuration(avgSessionSec)}
             icon="trending"
           />
           <StatCard
             label="Daily Avg"
-            value={avgDailySec > 0 ? formatTotalTime(avgDailySec) : "0m"}
+            value={formatTotalTime(avgDailySec)}
             icon="flame"
           />
         </div>
@@ -218,7 +218,7 @@ export function AnalyticsDashboard({ period: externalPeriod, onPeriodChange }: A
             value={
               allTime.longest_session_seconds > 0
                 ? formatDuration(allTime.longest_session_seconds)
-                : "0m"
+                : formatDuration(0)
             }
             icon="trending"
           />

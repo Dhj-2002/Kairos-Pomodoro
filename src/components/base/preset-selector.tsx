@@ -6,6 +6,7 @@ import { Settings2, Check, Trash2, Plus, Clock, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { TimerPreset } from "@/lib/db";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { formatMinutesAsDuration } from "@/lib/session-utils";
 
 type PresetUI =
   | { type: "closed" }
@@ -183,9 +184,9 @@ export function PresetSelector() {
                       {preset.name}
                     </h4>
                     <div className="flex items-center gap-2 text-[10px] text-sahara-text-muted font-medium">
-                      <span>{preset.work_duration / 60}m Focus</span>
+                      <span>{formatMinutesAsDuration(preset.work_duration / 60)} Focus</span>
                       <span className="size-1 rounded-full bg-sahara-border" />
-                      <span>{preset.short_break_duration / 60}m Break</span>
+                      <span>{formatMinutesAsDuration(preset.short_break_duration / 60)} Break</span>
                     </div>
                   </div>
                 </div>
@@ -367,7 +368,7 @@ function DurationControl({
       </p>
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-sahara-text">
-          {value / 60}m
+          {formatMinutesAsDuration(value / 60)}
         </span>
         <div className="flex gap-1">
           <button
