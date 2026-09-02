@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBuildCommand": "bun run build:macos"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "targets": ["dmg"],
+    "resources": {
+      "../migration-data/Kairos-Pomodoro.db": "migration/Kairos-Pomodoro.db"
+    }
+  }
+}

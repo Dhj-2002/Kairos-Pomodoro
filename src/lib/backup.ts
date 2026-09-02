@@ -1,0 +1,438 @@
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { writeFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { getDb } from "@/lib/db/schema";
+import { isTauri } from "@/lib/tauri";
+
+/** Schema version this build writes/accepts. Must stay in sync with schema.ts targetVersion. */
+export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 8;
+export const BACKUP_APP_ID = "kairos";
+
+/** Tables that get dumped on export and re-inserted on restore, in dependency order. */
+const TABLES = [
+  "categories",
+  "quick_blocks",
+  "sequence_templates",
+  "sequence_template_items",
+  "schedule_templates",
+  "template_blocks",
+  "tasks",
+  "sessions",
+  "presets",
+  "settings",
+  "time_blocks",
+  "journal_entries",
+  "badge_awards",
+] as const;
+
+const TABLE_COLUMNS: Record<string, string[]> = {
+  categories: ["id", "name", "color", "created_at"],
+  quick_blocks: [
+    "id", "name", "duration_minutes", "color", "category_id", "notification_enabled",
+    "sort_order", "created_at", "updated_at",
+  ],
+  sequence_templates: ["id", "name", "color", "created_at", "updated_at"],
+  sequence_template_items: [
+    "id", "template_id", "quick_block_id", "title", "duration_minutes",
+    "color", "category_id", "notification_enabled", "sort_order",
+  ],
+  schedule_templates: ["id", "name", "color", "description", "created_at", "updated_at"],
+  template_blocks: [
+    "id", "template_id", "title", "category_id", "start_minute",
+    "duration_minutes", "notification_enabled", "sort_order",
+  ],
+  tasks: [
+    "id",
+    "name",
+    "estimated_pomos",
+    "completed_pomos",
+    "created_at",
+    "archived",
+    "project",
+    "priority",
+    "category_id",
+  ],
+  sessions: [
+    "id",
+    "task_id",
+    "phase",
+    "started_at",
+    "ended_at",
+    "duration_sec",
+    "completed",
+    "category_id",
+    "intention",
+    "mood",
+    "notes",
+  ],
+  presets: [
+    "id",
+    "name",
+    "work_duration",
+    "short_break_duration",
+    "long_break_duration",
+    "pomos_before_long_break",
+    "created_at",
+  ],
+  settings: ["key", "value"],
+  time_blocks: [
+    "id",
+    "title",
+    "start_time",
+    "end_time",
+    "task_id",
+    "category_id",
+    "color",
+    "completed",
+    "created_at",
+    "session_id",
+    "source_template_id",
+    "source_template_block_id",
+    "notification_enabled",
+    "reminded_at",
+  ],
+  journal_entries: ["id", "date", "content", "created_at", "updated_at"],
+  badge_awards: ["badge_id", "earned_at", "trigger_session_id", "announced_at"],
+};
+
+/**
+ * Per-column fallbacks applied when a backup row has NULL/undefined for a
+ * NOT NULL column, or for a column the read path relies on. Without these,
+ * such rows violate constraints and get silently skipped during restore —
+ * which is why tasks appeared not to restore: a NULL `archived` makes
+ * getTasks()'s `WHERE archived = 0` filter hide the row, and NULL
+ * estimated/completed_pomos violate NOT NULL.
+ */
+const COLUMN_DEFAULTS: Record<string, Record<string, unknown>> = {
+  tasks: {
+    estimated_pomos: 1,
+    completed_pomos: 0,
+    archived: 0,
+    name: "Untitled",
+  },
+  sessions: {
+    phase: "work",
+    duration_sec: 0,
+    completed: 0,
+  },
+  categories: {
+    name: "Untitled",
+    color: "#c2652a",
+  },
+  quick_blocks: {
+    name: "Untitled block",
+    duration_minutes: 30,
+    color: "#c2652a",
+    notification_enabled: 1,
+    sort_order: 0,
+  },
+  sequence_templates: {
+    name: "Untitled template",
+    color: "#c2652a",
+  },
+  sequence_template_items: {
+    title: "Untitled block",
+    duration_minutes: 30,
+    color: "#c2652a",
+    notification_enabled: 1,
+    sort_order: 0,
+  },
+  schedule_templates: {
+    name: "Untitled template",
+    color: "#c2652a",
+  },
+  template_blocks: {
+    start_minute: 540,
+    duration_minutes: 25,
+    notification_enabled: 1,
+    sort_order: 0,
+  },
+  time_blocks: {
+    notification_enabled: 1,
+  },
+};
+
+/**
+ * Resolve a cell value for insert: undefined → default (if any) → null.
+ * Defaults keep NOT NULL columns valid and ensure columns the read path
+ * depends on (e.g. tasks.archived, used by `WHERE archived = 0`) are set.
+ */
+export function resolveValue(
+  table: string,
+  col: string,
+  raw: unknown,
+): unknown {
+  if (raw !== undefined && raw !== null) return raw;
+  const defaults = COLUMN_DEFAULTS[table];
+  if (defaults && col in defaults) return defaults[col];
+  return null;
+}
+
+export interface BackupFile {
+  app: string;
+  formatVersion: number;
+  exportedAt: string;
+  schemaVersion: number;
+  data: Record<string, Record<string, unknown>[]>;
+}
+
+export interface BackupResult {
+  ok: boolean;
+  /** Path written (export) or read (import), when applicable. */
+  path?: string;
+  error?: string;
+  /** Counts restored per table (import only). */
+  counts?: Record<string, number>;
+}
+
+async function dumpTable(db: Awaited<ReturnType<typeof getDb>>, table: string) {
+  try {
+    return await db.select<Record<string, unknown>[]>(`SELECT * FROM ${table}`);
+  } catch {
+    // Table may not exist on an older DB that hasn't migrated yet.
+    return [];
+  }
+}
+
+/**
+ * Export the entire local database to a versioned JSON file.
+ * Returns BACKUP_RESULT with the written path, or an error.
+ */
+export async function exportBackup(): Promise<BackupResult> {
+  if (!isTauri()) return { ok: false, error: "Not running in desktop mode." };
+
+  try {
+    const db = await getDb();
+
+    const data: BackupFile["data"] = {};
+    for (const table of TABLES) {
+      data[table] = await dumpTable(db, table);
+    }
+
+    let schemaVersion = 0;
+    try {
+      const rows = await db.select<{ value: string }[]>(
+        "SELECT value FROM _schema_meta WHERE key = 'version'",
+      );
+      if (rows.length > 0) schemaVersion = Number(rows[0].value);
+    } catch {
+      // ignore
+    }
+
+    const payload: BackupFile = {
+      app: BACKUP_APP_ID,
+      formatVersion: BACKUP_FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      schemaVersion,
+      data,
+    };
+
+    const defaultFilename = `kairos-backup-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, "-")}.json`;
+
+    const filePath = await save({
+      defaultPath: defaultFilename,
+      filters: [{ name: "Kairos Backup", extensions: ["json"] }],
+      title: "Save Kairos Backup",
+    });
+
+    if (!filePath) return { ok: false, error: "Cancelled" };
+
+    await writeFile(filePath, new TextEncoder().encode(JSON.stringify(payload, null, 2)));
+    return { ok: true, path: filePath };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.message ?? "Unknown error" };
+  }
+}
+
+function validateBackup(payload: unknown): asserts payload is BackupFile {
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("Invalid backup file: not a JSON object.");
+  }
+  const p = payload as Partial<BackupFile>;
+  if (p.app !== BACKUP_APP_ID) {
+    throw new Error("Invalid backup file: not a Kairos backup.");
+  }
+  // Accept any formatVersion <= BACKUP_FORMAT_VERSION (backward compatible), default to 0
+  const formatVersion = typeof p.formatVersion === "number" ? p.formatVersion : 0;
+  if (formatVersion > BACKUP_FORMAT_VERSION) {
+    throw new Error(
+      `Backup was created by a newer version of Kairos (format v${formatVersion}). This build only supports up to v${BACKUP_FORMAT_VERSION}.`,
+    );
+  }
+  // Default schemaVersion to 0 if not present (for old backups)
+  const schemaVersion = typeof p.schemaVersion === "number" ? p.schemaVersion : 0;
+  if (schemaVersion > BACKUP_SCHEMA_VERSION) {
+    throw new Error(
+      `Backup schema version ${schemaVersion} is newer than supported ${BACKUP_SCHEMA_VERSION}. Update the app to restore this backup.`,
+    );
+  }
+  if (typeof p.data !== "object" || p.data === null) {
+    throw new Error("Invalid backup file: missing data.");
+  }
+}
+
+/**
+ * Restore a database from a JSON backup file. DESTRUCTIVE: clears all existing
+ * rows in the affected tables before re-inserting. Not reversible — callers
+ * should confirm with the user (and ideally auto-backup first).
+ */
+export async function importBackup(): Promise<BackupResult> {
+  if (!isTauri()) return { ok: false, error: "Not running in desktop mode." };
+
+  let filePath: string | null = null;
+  try {
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: "Kairos Backup", extensions: ["json"] }],
+      title: "Select a Kairos Backup to Restore",
+    });
+    filePath = typeof picked === "string" ? picked : null;
+    if (!filePath) return { ok: false, error: "Cancelled" };
+
+    const raw = await readTextFile(filePath);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      throw new Error("Could not parse backup file: invalid JSON.");
+    }
+    validateBackup(payload);
+
+    const db = await getDb();
+
+    const counts: Record<string, number> = {};
+
+    // NOTE: We intentionally do NOT use an explicit transaction
+    // (BEGIN/COMMIT/ROLLBACK). The @tauri-apps/plugin-sql connection is a
+    // shared singleton; background polling (TodayFocus 10s, analytics) issues
+    // statements concurrently, and explicit transaction control through this
+    // plugin is unreliable — it produces "cannot start a transaction within a
+    // transaction" when a prior failed rollback left the connection in a
+    // transactional state, or when an interleaved statement auto-begins one.
+    //
+    // Autocommit avoids that entirely: each statement commits and releases the
+    // write lock immediately, so no lock is held across the multi-second
+    // import. That also REDUCES contention with polling vs. a long-held
+    // transaction. Per-statement retry handles momentary SQLITE_BUSY.
+    //
+    // We deliberately do NOT toggle PRAGMA foreign_keys here. The restore wipes
+    // in reverse dependency order and inserts in forward order, so FK refs are
+    // always satisfied. Toggling the pragma would change global connection
+    // state for unrelated concurrent operations on this shared connection.
+    await db.execute("PRAGMA busy_timeout = 15000").catch(() => {});
+
+    const isBusyError = (e: unknown) =>
+      /database is locked|SQLITE_BUSY|code: 5/i.test(String((e as Error)?.message ?? e));
+
+    /** Run a write statement, retrying on SQLITE_BUSY with backoff. */
+    const execWithRetry = async (sql: string, params: unknown[] = []) => {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          await db.execute(sql, params);
+          return;
+        } catch (e) {
+          if (!isBusyError(e) || attempt === 5) throw e;
+          await new Promise((r) => setTimeout(r, attempt * 300));
+        }
+      }
+    };
+
+    // Wipe (reverse dependency order so FK refs clear cleanly).
+    for (const table of [...TABLES].reverse()) {
+      try {
+        await execWithRetry(`DELETE FROM ${table}`);
+      } catch (e) {
+        const msg = (e as Error)?.message ?? "";
+        if (!msg.toLowerCase().includes("no such table")) throw e;
+        // table may not exist pre-migration; ignore
+      }
+    }
+
+    // Re-insert (forward dependency order).
+    for (const table of TABLES) {
+      const rows = payload.data[table] ?? [];
+      counts[table] = 0;
+      if (rows.length === 0) continue;
+
+      const allowedCols = TABLE_COLUMNS[table] ?? [];
+      const validRows = rows.filter((row) => {
+        const cols = Object.keys(row).filter((c) => allowedCols.includes(c));
+        return cols.length > 0;
+      });
+      if (validRows.length === 0) continue;
+
+      // Union of allowed columns across ALL valid rows. Deriving from the first
+      // row only would drop a column whenever a later row has it but the first
+      // doesn't (sparse backups), silently losing data and/or causing per-row
+      // inserts to omit required columns.
+      const colsSet = new Set<string>();
+      for (const row of validRows) {
+        for (const c of Object.keys(row)) {
+          if (allowedCols.includes(c)) colsSet.add(c);
+        }
+      }
+      const cols = Array.from(colsSet);
+
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+        const batch = validRows.slice(i, i + BATCH_SIZE);
+        const allValues: unknown[] = [];
+        const rowPlaceholders: string[] = [];
+        let paramIndex = 1;
+
+        for (const row of batch) {
+          const placeholders = cols.map(() => `$${paramIndex++}`);
+          rowPlaceholders.push(`(${placeholders.join(", ")})`);
+          for (const col of cols) {
+            allValues.push(resolveValue(table, col, (row as Record<string, unknown>)[col]));
+          }
+        }
+
+        try {
+          await execWithRetry(
+            `INSERT INTO ${table} (${cols.join(", ")}) VALUES ${rowPlaceholders.join(", ")}`,
+            allValues,
+          );
+          counts[table] += batch.length;
+        } catch (e) {
+          // Batch failed — fall back to one-by-one so a single bad row
+          // doesn't abort the whole table.
+          console.warn(
+            `[backup] Batch insert for ${table} failed, trying one-by-one`,
+            (e as Error)?.message,
+          );
+          for (const row of batch) {
+            try {
+              const singlePlaceholders = cols.map((_, idx) => `$${idx + 1}`);
+              const singleValues = cols.map((col) =>
+                resolveValue(table, col, (row as Record<string, unknown>)[col]),
+              );
+              await execWithRetry(
+                `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${singlePlaceholders.join(", ")})`,
+                singleValues,
+              );
+              counts[table]++;
+            } catch (singleErr) {
+              console.warn(`[backup] Skipped ${table} row:`, (singleErr as Error)?.message);
+            }
+          }
+        }
+      }
+    }
+
+    return { ok: true, path: filePath, counts };
+  } catch (e) {
+    console.error("[backup] Import failed:", e);
+    const err = e as Error;
+    return { 
+      ok: false, 
+      path: filePath ?? undefined, 
+      error: err?.message 
+        ? `${err.message} (see dev console for details)` 
+        : "Unknown error (see dev console for details)" 
+    };
+  }
+}

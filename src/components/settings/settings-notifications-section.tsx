@@ -1,0 +1,290 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/cn";
+import {
+  Bell,
+  CheckCircle2,
+  XCircle,
+  Volume2,
+  Loader2,
+  ExternalLink,
+} from "lucide-react";
+import { sendNotification } from "@/lib/notifications";
+import {
+  playScheduleReminder,
+  SCHEDULE_REMINDER_SOUNDS,
+} from "@/lib/notifications";
+import type { ScheduleReminderSound } from "@/features/settings/settings-types";
+import { SliderField } from "@/components/base/slider-field";
+
+interface NotificationStatus {
+  status: "granted" | "denied" | "unknown" | "unavailable";
+  checking: boolean;
+  error: string | null;
+}
+
+interface SettingsNotificationsProps {
+  notifStatus: NotificationStatus;
+  requestPermission: () => void;
+  soundEnabled: boolean;
+  onSoundToggle: (v: boolean) => void;
+  scheduleReminderSound: ScheduleReminderSound;
+  onScheduleReminderSoundChange: (sound: ScheduleReminderSound) => void;
+  scheduleReminderVolume: number;
+  onScheduleReminderVolumeChange: (volume: number) => void;
+}
+
+export function SettingsNotifications({
+  notifStatus,
+  requestPermission,
+  soundEnabled,
+  onSoundToggle,
+  scheduleReminderSound,
+  onScheduleReminderSoundChange,
+  scheduleReminderVolume,
+  onScheduleReminderVolumeChange,
+}: SettingsNotificationsProps) {
+  const [testing, setTesting] = useState(false);
+
+  const handleTestNotification = async () => {
+    setTesting(true);
+    try {
+      await sendNotification(
+        "schedule-start",
+        "This is a test notification!",
+      );
+    } finally {
+      setTimeout(() => setTesting(false), 2000);
+    }
+  };
+
+  const openSystemPreferences = () => {
+    try {
+      window.open(
+        "x-apple.systempreferences:com.apple.preference.notifications",
+        "_blank",
+      );
+    } catch {}
+  };
+
+  const { status, checking, error } = notifStatus;
+
+  return (
+    <section>
+      <h3 className="font-serif text-xl md:text-2xl text-sahara-text mb-6 md:mb-8">
+        Notifications & Sounds
+      </h3>
+
+      <div className="bg-sahara-bg/50 border border-sahara-border/15 rounded-xl md:rounded-2xl p-4 md:p-5 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <Bell className="size-4 md:w-5 md:h-5 text-sahara-primary shrink-0" />
+            <div>
+              <h4 className="font-semibold text-sahara-text-secondary text-sm">
+                System Notifications
+              </h4>
+              <p className="text-[10px] md:text-[11px] text-sahara-text-muted mt-0.5">
+                macOS desktop notifications when timer ends
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-start">
+            {checking && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-sahara-primary uppercase tracking-wider">
+                <Loader2 className="size-3 md:w-3.5 md:h-3.5 animate-spin" />
+                Requesting…
+              </span>
+            )}
+            {!checking && status === "granted" && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-green-600 uppercase tracking-wider">
+                <CheckCircle2 className="size-3 md:w-3.5 md:h-3.5" />
+                Enabled
+              </span>
+            )}
+            {!checking && status === "denied" && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-red-500 uppercase tracking-wider">
+                <XCircle className="size-3 md:w-3.5 md:h-3.5" />
+                Disabled
+              </span>
+            )}
+            {!checking && status === "unknown" && (
+              <span className="text-[10px] md:text-[11px] font-bold text-sahara-text-muted uppercase tracking-wider">
+                Not checked
+              </span>
+            )}
+            {!checking && status === "unavailable" && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-amber-600 uppercase tracking-wider">
+                Browser Mode
+              </span>
+            )}
+          </div>
+        </div>
+
+        {error && status !== "unavailable" && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 border border-red-200/50 text-red-600 text-[10px] md:text-[11px]">
+            Error: {error}
+          </div>
+        )}
+
+        {status === "unavailable" && (
+          <div className="mb-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl bg-amber-50 border border-amber-200/40 text-amber-700 text-[10px] md:text-[11px] leading-relaxed">
+            Notifications require the Tauri desktop app. You&apos;re currently
+            running in browser dev mode. Run{" "}
+            <code className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-[9px] md:text-[10px]">
+              npm run tauri dev
+            </code>{" "}
+            to enable native macOS notifications.
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          {(status === "denied" || status === "unknown") && (
+            <Button
+              variant="solid"
+              intent="sahara"
+              size="sm"
+              onClick={() => requestPermission()}
+              disabled={checking}
+              className="gap-2 text-[10px] md:text-[11px] tracking-wider"
+            >
+              {checking ? (
+                <Loader2 className="size-3 md:w-3.5 md:h-3.5 animate-spin" />
+              ) : (
+                <Bell className="size-3 md:w-3.5 md:h-3.5" />
+              )}
+              {checking ? "Requesting…" : "Enable Notifications"}
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            intent={testing ? "green" : "default"}
+            size="sm"
+            disabled={testing || status !== "granted"}
+            onClick={handleTestNotification}
+            className={cn(
+              "gap-2 text-[10px] md:text-[11px] tracking-wider",
+              !testing && status !== "granted" && "opacity-40",
+            )}
+          >
+            <Volume2 className="size-3 md:w-3.5 md:h-3.5" />
+            {testing ? "Sent!" : "Test Notification"}
+          </Button>
+
+          {status === "denied" && !checking && (
+            <Button
+              variant="outline"
+              intent="sahara"
+              size="xs"
+              onClick={openSystemPreferences}
+              className="gap-1.5 text-[10px] md:text-[11px] font-medium"
+            >
+              <ExternalLink className="size-2.5 md:w-3 md:h-3" />
+              Open Settings
+            </Button>
+          )}
+        </div>
+
+        {status === "denied" && !checking && (
+          <p className="mt-3 text-[10px] md:text-[11px] text-sahara-text-muted leading-relaxed">
+            Kairos-Pomodoro needs permission to show notifications. Click{" "}
+            <strong>"Enable Notifications"</strong> above to trigger the macOS
+            permission dialog, or open{" "}
+            <strong>System Preferences → Notifications</strong> manually and
+            find <em>Kairos-Pomodoro</em> in the list.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-5">
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <span className="font-bold text-sahara-text-secondary text-sm block">
+              End of session chime
+            </span>
+            <span className="text-[11px] text-sahara-text-muted mt-0.5 block">
+              Play a sound when timer completes
+            </span>
+          </div>
+          <Switch
+            checked={soundEnabled}
+            onCheckedChange={onSoundToggle}
+            className="ml-4"
+          />
+        </div>
+
+        <div className="border-t border-sahara-border/20 pt-5">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-3">
+            <div>
+              <span className="font-bold text-sahara-text-secondary text-sm block">
+                Schedule block reminder
+              </span>
+              <span className="text-[11px] text-sahara-text-muted mt-0.5 block">
+                A prominent sound lasting about 2–2.5 seconds
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              intent="sahara"
+              size="xs"
+              disabled={!soundEnabled}
+              onClick={() =>
+                playScheduleReminder(
+                  scheduleReminderSound,
+                  scheduleReminderVolume,
+                )
+              }
+              className="gap-1.5 text-[10px] font-bold tracking-wider uppercase"
+            >
+              <Volume2 className="size-3" />
+              Preview
+            </Button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {SCHEDULE_REMINDER_SOUNDS.map((option) => {
+              const selected = option.value === scheduleReminderSound;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={!soundEnabled}
+                  onClick={() => onScheduleReminderSoundChange(option.value)}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition-colors disabled:opacity-40",
+                    selected
+                      ? "border-sahara-primary bg-sahara-primary/10"
+                      : "border-sahara-border/25 bg-sahara-bg/40 hover:border-sahara-primary/40",
+                  )}
+                >
+                  <span className="block text-xs font-bold text-sahara-text-secondary">
+                    {option.label}
+                  </span>
+                  <span className="mt-1 block text-[10px] leading-relaxed text-sahara-text-muted">
+                    {option.description} · {option.durationSeconds.toFixed(1)}s
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 rounded-xl border border-sahara-border/20 bg-sahara-bg/30 p-4">
+            <SliderField
+              label="Reminder volume"
+              value={scheduleReminderVolume}
+              min={0}
+              max={100}
+              step={5}
+              onChange={onScheduleReminderVolumeChange}
+              formatValue={(value) => `${value}%`}
+            />
+            <p className="mt-2 text-[10px] text-sahara-text-muted">
+              50% is the normal reference volume.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

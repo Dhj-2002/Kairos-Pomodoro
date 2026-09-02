@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.figma/
+
+# Tauri signing keys (NEVER commit these)
+*.key
+!.key.pub
+.tauri/
+
+# E2E Test Results (don't commit test artifacts)
+e2e/test-results/
+e2e/playwright-report/
+e2e/.playwright-cache/
+
+# Test Results
+test-results/
+
+# Local user data and migration/transfer artifacts (NEVER publish)
+backups/
+.commandcode/
+migration-data/
+dist-transfer/
+ci-upload/
+trash_rm_scripts/
+*.db
+*.db-shm
+*.db-wal
+*.dmg
+*.zip

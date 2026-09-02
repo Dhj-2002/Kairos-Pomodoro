@@ -1,0 +1,302 @@
+import { useState, useEffect, useRef } from "react";
+import { Loader2, Flame, Trophy } from "lucide-react";
+import {
+  getWeeklyData,
+  getDailyScore,
+  getCurrentStreak,
+  getBestStreak,
+  getAllTimeStats,
+  type DayData,
+} from "@/lib/db";
+import { getAchievementSnapshot } from "@/features/achievements/achievement-service";
+import type { AchievementDisplay } from "@/features/achievements/achievement-catalog";
+import { StatCard } from "@/components/base/stat-card";
+import { WeeklyChart } from "@/components/base/weekly-chart";
+import { AchievementSection } from "@/components/base/achievement-section";
+import { ScoreRing } from "@/components/base/score-ring";
+import { AnalyticsCategoryBreakdown } from "@/components/base/analytics-category-breakdown";
+import { CategoryInsights } from "@/components/base/category-insights";
+import { DateRangePicker } from "@/components/base/date-range-picker";
+import { MoodDistribution } from "@/components/base/mood-distribution";
+import { SessionNotes } from "@/components/base/session-notes";
+import { CompletedTasks } from "@/components/base/completed-tasks";
+import { formatTotalTime, formatDuration } from "@/lib/session-utils";
+import { type DatePeriod, getDateRange } from "@/lib/date-range";
+
+interface AnalyticsDashboardProps {
+  period?: DatePeriod;
+  onPeriodChange?: (p: DatePeriod) => void;
+}
+
+export function AnalyticsDashboard({ period: externalPeriod, onPeriodChange }: AnalyticsDashboardProps) {
+  const [weekData, setWeekData] = useState<DayData[]>([]);
+  const [score, setScore] = useState(0);
+  const [badges, setBadges] = useState<AchievementDisplay[]>([]);
+  const [streaks, setStreaks] = useState({ current: 0, best: 0 });
+  const [allTime, setAllTime] = useState({
+    total_focus_seconds: 0,
+    total_sessions: 0,
+    avg_session_seconds: 0,
+    longest_session_seconds: 0,
+    total_break_seconds: 0,
+    avg_break_seconds: 0,
+  });
+  const loadingRef = useRef(true);
+  const [internalPeriod, setInternalPeriod] = useState<DatePeriod>("last7days");
+
+  const period = externalPeriod ?? internalPeriod;
+  const setPeriod = onPeriodChange ?? setInternalPeriod;
+
+  const range = getDateRange(period);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadingRef.current = true;
+
+    Promise.all([
+      getWeeklyData(range.startDate, range.endDate).catch(() => []),
+      Promise.all([getCurrentStreak(), getBestStreak()])
+        .then(([current, best]) => ({ current, best }))
+        .catch(() => ({ current: 0, best: 0 })),
+      getAllTimeStats().catch(() => allTime),
+    ]).then(async ([wd, st, at]) => {
+      const [sc, bd] = await Promise.all([
+        getDailyScore(undefined, st.current).catch(() => 0),
+        getAchievementSnapshot().catch(() => [] as AchievementDisplay[]),
+      ]);
+      if (!cancelled) {
+        setWeekData(wd);
+        setScore(sc);
+        setBadges(bd);
+        setStreaks(st);
+        setAllTime(at);
+        loadingRef.current = false;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [range.startDate, range.endDate]);
+
+  const totalFocusSec = weekData.reduce((s, d) => s + d.total_seconds, 0);
+  const totalSessions = weekData.reduce((s, d) => s + d.session_count, 0);
+  const avgSessionSec =
+    totalSessions > 0 ? Math.round(totalFocusSec / totalSessions) : 0;
+  const periodDayCount = Math.max(
+    1,
+    Math.round(
+      (new Date(`${range.endDate}T00:00:00`).getTime() -
+        new Date(`${range.startDate}T00:00:00`).getTime()) /
+        86400000,
+    ) + 1,
+  );
+  const avgDailySec = totalFocusSec > 0
+    ? Math.round(totalFocusSec / periodDayCount)
+    : 0;
+
+  if (loadingRef.current && weekData.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader2 className="size-8 text-sahara-primary animate-spin" />
+        <p className="text-xs font-semibold text-sahara-text-muted uppercase tracking-wider">
+          Loading analytics…
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 md:space-y-10">
+      {/* Primary analytics: Category time is the first decision surface and
+          owns the shared Day / Week / Month / Year range control. */}
+      <section>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-6">
+          <div>
+            <h2 className="font-serif text-lg font-semibold tracking-wide text-sahara-text md:text-2xl">
+              Category Breakdown
+            </h2>
+            <p className="mt-1 text-xs text-sahara-text-muted">
+              Focus time grouped by tag for the selected period.
+            </p>
+          </div>
+          <DateRangePicker value={period} onChange={setPeriod} />
+        </div>
+        <AnalyticsCategoryBreakdown startDate={range.startDate} endDate={range.endDate} />
+      </section>
+
+      {/* Score + Streaks */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          Today
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
+          <div className="bg-sahara-card/50 border border-sahara-border/20 rounded-xl p-5 md:p-6 flex flex-col items-center justify-center">
+            <ScoreRing score={score} />
+            <p className="text-xs text-sahara-text-muted mt-3 text-center">
+              Productivity score
+            </p>
+          </div>
+          <div className="bg-sahara-card/50 border border-sahara-border/20 rounded-xl p-5 md:p-6 flex flex-col items-center justify-center">
+            <div className="size-24 rounded-full bg-sahara-primary-light/50 flex flex-col items-center justify-center">
+              <Flame className="size-4 text-sahara-primary mb-0.5" />
+              <p className="font-serif text-3xl md:text-4xl font-bold text-sahara-primary tabular-nums leading-none">
+                {streaks.current}
+              </p>
+            </div>
+            <p className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest mt-3">
+              Current streak
+            </p>
+            <p className="text-xs text-sahara-text-muted mt-0.5 text-center">
+              day{streaks.current === 1 ? "" : "s"} in a row
+            </p>
+          </div>
+          <div className="bg-sahara-card/50 border border-sahara-border/20 rounded-xl p-5 md:p-6 flex flex-col items-center justify-center">
+            <div className="size-24 rounded-full bg-sahara-primary-light/50 flex flex-col items-center justify-center">
+              <Trophy className="size-4 text-sahara-primary mb-0.5" />
+              <p className="font-serif text-3xl md:text-4xl font-bold text-sahara-primary tabular-nums leading-none">
+                {streaks.best}
+              </p>
+            </div>
+            <p className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest mt-3">
+              Best streak
+            </p>
+            <p className="text-xs text-sahara-text-muted mt-0.5 text-center">
+              all-time longest run
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Overview Stats */}
+      <section>
+        <h2 className="mb-4 font-serif text-lg font-semibold tracking-wide text-sahara-text md:mb-6 md:text-2xl">
+          Overview
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+          <StatCard
+            label="Total Focus"
+            value={formatTotalTime(totalFocusSec)}
+            icon="clock"
+          />
+          <StatCard
+            label="Sessions"
+            value={String(totalSessions)}
+            icon="target"
+          />
+          <StatCard
+            label="Avg Session"
+            value={avgSessionSec > 0 ? formatDuration(avgSessionSec) : "0m"}
+            icon="trending"
+          />
+          <StatCard
+            label="Daily Avg"
+            value={avgDailySec > 0 ? formatTotalTime(avgDailySec) : "0m"}
+            icon="flame"
+          />
+        </div>
+      </section>
+
+      {/* All-time stats */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          All-Time
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+          <StatCard
+            label="Total Focus"
+            value={formatTotalTime(allTime.total_focus_seconds)}
+            icon="clock"
+          />
+          <StatCard
+            label="Sessions"
+            value={String(allTime.total_sessions)}
+            icon="target"
+          />
+          <StatCard
+            label="Longest Session"
+            value={
+              allTime.longest_session_seconds > 0
+                ? formatDuration(allTime.longest_session_seconds)
+                : "0m"
+            }
+            icon="trending"
+          />
+          <StatCard
+            label="Total Breaks"
+            value={formatTotalTime(allTime.total_break_seconds)}
+            icon="flame"
+          />
+        </div>
+      </section>
+
+      {/* Weekly Chart */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          {range.label}
+        </h2>
+        <div className="bg-sahara-card/50 border border-sahara-border/20 rounded-xl p-3.5 md:p-5">
+          <WeeklyChart
+            data={weekData}
+            startDate={range.startDate}
+            endDate={range.endDate}
+          />
+        </div>
+      </section>
+
+      {/* Completed tasks remain available without competing with Categories. */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          Tasks
+        </h2>
+        <CompletedTasks startDate={range.startDate} endDate={range.endDate} />
+      </section>
+
+      {/* Category metrics */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          Category Insights
+        </h2>
+        <CategoryInsights startDate={range.startDate} endDate={range.endDate} />
+      </section>
+
+      {/* Mood Distribution */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          Mood Insights
+        </h2>
+        <MoodDistribution startDate={range.startDate} endDate={range.endDate} />
+      </section>
+
+      {/* Session Notes */}
+      <section>
+        <h2 className="font-serif text-lg font-semibold tracking-wide md:text-2xl text-sahara-text mb-4 md:mb-6">
+          Session Notes
+        </h2>
+        <SessionNotes startDate={range.startDate} endDate={range.endDate} />
+      </section>
+
+      {/* Secondary analytics: achievements intentionally stay last. */}
+      <div className="space-y-8 md:space-y-12">
+        <AchievementSection
+          title="Achievements"
+          description="Milestones earned from the way you focus."
+          badges={badges.filter((badge) => badge.category === "legacy")}
+          accent="primary"
+        />
+        <AchievementSection
+          title="Streak Badges"
+          description="Build your rhythm, one focused day at a time."
+          badges={badges.filter((badge) => badge.category === "streak")}
+          accent="flame"
+        />
+        <AchievementSection
+          title="Monthly Badges"
+          description="Keep your momentum moving across the calendar."
+          badges={badges.filter((badge) => badge.category === "monthly")}
+          accent="calendar"
+        />
+      </div>
+    </div>
+  );
+}

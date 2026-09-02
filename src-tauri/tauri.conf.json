@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kairos-Pomodoro",
+  "version": "../package.json",
+  "identifier": "com.kairos.pomodoro.app",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Kairos-Pomodoro",
+        "width": 1280,
+        "height": 720,
+        "minWidth": 320,
+        "minHeight": 700,
+        "decorations": true,
+        "transparent": false,
+        "resizable": true,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      },
+      {
+        "label": "mini",
+        "title": "Kairos Schedule",
+        "width": 360,
+        "height": 84,
+        "minWidth": 360,
+        "minHeight": 84,
+        "maxWidth": 360,
+        "maxHeight": 84,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https://asset.localhost data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost https://github.com https://*.githubusercontent.com"
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Dhj-2002/Kairos-Pomodoro/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIwQjdFNEFEMDE3REMzM0UKUldRK3czMEJyZVMzSURKL25BUVl3TlkzSWRrck9XNlEyZjNZak0ycEhQSk1OM1JUNUZMTWowaE8K",
+      "v1Compatible": false
+    }
+  }
+}
