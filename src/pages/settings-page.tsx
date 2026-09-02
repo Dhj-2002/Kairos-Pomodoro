@@ -77,6 +77,8 @@ export function SettingsPage() {
                   onToggle={(k: string, v: boolean) =>
                     updateSetting(k as any, v)
                   }
+                  updateProxy={settings.updateProxy}
+                  onUpdateProxyChange={(proxy) => updateSetting("updateProxy", proxy)}
                 />
               )}
 

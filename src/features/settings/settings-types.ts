@@ -19,4 +19,6 @@ export interface Settings {
   theme: ThemeMode;
   themePreset: ThemePreset;
   timerStyle: "solid" | "zigzag";
+  /** Optional HTTP/SOCKS proxy used only by the native updater. */
+  updateProxy: string;
 }

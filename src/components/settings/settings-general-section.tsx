@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
-import { Moon, Sun, Monitor, Circle, Activity, RefreshCw, CheckCircle2, AlertCircle, Download } from "lucide-react";
+import { Moon, Sun, Monitor, Circle, Activity, RefreshCw, CheckCircle2, AlertCircle, Download, ExternalLink } from "lucide-react";
 import type { ThemeMode, ThemePreset } from "@/features/settings/settings-types";
 import { useUpdate } from "@/components/providers/update-provider";
 
@@ -88,6 +88,8 @@ interface SettingsGeneralProps {
   onTimerStyleChange: (style: "solid" | "zigzag") => void;
   settings: Record<string, boolean>;
   onToggle: (key: string, value: boolean) => void;
+  updateProxy: string;
+  onUpdateProxyChange: (proxy: string) => void;
 }
 
 export function SettingsGeneralSection({
@@ -99,6 +101,8 @@ export function SettingsGeneralSection({
   onTimerStyleChange,
   settings,
   onToggle,
+  updateProxy,
+  onUpdateProxyChange,
 }: SettingsGeneralProps) {
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
@@ -240,25 +244,52 @@ export function SettingsGeneralSection({
         ))}
       </div>
 
-      <UpdatesSection />
+      <UpdatesSection
+        updateProxy={updateProxy}
+        onUpdateProxyChange={onUpdateProxyChange}
+      />
     </section>
   );
 }
 
 /** Manual update-check trigger + status. No-op outside the UpdateProvider (tests/dev). */
-function UpdatesSection() {
+function UpdatesSection({
+  updateProxy,
+  onUpdateProxyChange,
+}: {
+  updateProxy: string;
+  onUpdateProxyChange: (proxy: string) => void;
+}) {
   const update = useUpdate();
   if (!update) return null;
-  return <UpdatesSectionInner update={update} />;
+  return (
+    <UpdatesSectionInner
+      update={update}
+      updateProxy={updateProxy}
+      onUpdateProxyChange={onUpdateProxyChange}
+    />
+  );
 }
 
 function UpdatesSectionInner({
   update,
+  updateProxy,
+  onUpdateProxyChange,
 }: {
   update: NonNullable<ReturnType<typeof useUpdate>>;
+  updateProxy: string;
+  onUpdateProxyChange: (proxy: string) => void;
 }) {
   const { status, currentVersion, installError, installedPendingRestart, checkForUpdate } = update;
   const checking = status.kind === "checking";
+  const [proxyDraft, setProxyDraft] = useState(updateProxy);
+
+  useEffect(() => setProxyDraft(updateProxy), [updateProxy]);
+
+  const saveProxy = () => {
+    const normalized = proxyDraft.trim();
+    if (normalized !== updateProxy) onUpdateProxyChange(normalized);
+  };
 
   const statusText =
     status.kind === "checking"
@@ -332,6 +363,43 @@ function UpdatesSectionInner({
           {checking ? "Checking…" : "Check for Updates"}
         </Button>
       </div>
+
+      <div className="mt-3 space-y-2">
+        <label
+          htmlFor="update-proxy"
+          className="block text-[10px] font-bold uppercase tracking-wider text-sahara-text-muted"
+        >
+          Updater proxy (optional)
+        </label>
+        <input
+          id="update-proxy"
+          value={proxyDraft}
+          onChange={(event) => setProxyDraft(event.target.value)}
+          onBlur={saveProxy}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          placeholder="http://127.0.0.1:7890 or socks5://127.0.0.1:1080"
+          spellCheck={false}
+          className="w-full rounded-xl border border-sahara-border/30 bg-sahara-bg px-3 py-2 text-xs text-sahara-text outline-none focus:border-sahara-primary/60"
+        />
+        <p className="text-[10px] leading-relaxed text-sahara-text-muted">
+          Leave empty for the direct/system route. Changes are saved automatically.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          void import("@tauri-apps/plugin-opener").then(({ openUrl }) =>
+            openUrl("https://github.com/Dhj-2002/Kairos-Pomodoro/releases/latest"),
+          );
+        }}
+        className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-sahara-primary hover:underline cursor-pointer"
+      >
+        <ExternalLink className="size-3" />
+        Open latest download page
+      </button>
 
       {installError && (
         <div className="mt-3 flex items-start gap-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl">

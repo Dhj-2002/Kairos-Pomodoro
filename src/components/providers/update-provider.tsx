@@ -12,8 +12,10 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { isTauri } from "@/lib/tauri";
 import { X, Download, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSettingsStore } from "@/features/settings/use-settings-store";
 
 const RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_REQUEST_TIMEOUT_MS = 15_000;
 
 interface UpdateProviderProps {
   children: ReactNode;
@@ -53,6 +55,7 @@ export function useUpdate(): UpdateContextValue | null {
 }
 
 export function UpdateProvider({ children }: UpdateProviderProps) {
+  const updateProxy = useSettingsStore((state) => state.settings.updateProxy);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [status, setStatus] = useState<UpdateCheckStatus>({ kind: "idle" });
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
@@ -61,6 +64,7 @@ export function UpdateProvider({ children }: UpdateProviderProps) {
   const [installedPendingRestart, setInstalledPendingRestart] = useState(false);
   const dismissedRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const checkingRef = useRef(false);
 
   // Read the running app's version (sourced from package.json via Tauri at
   // build time). Used to show "Current version: vX.Y.Z" in Settings so users
@@ -74,10 +78,16 @@ export function UpdateProvider({ children }: UpdateProviderProps) {
   }, []);
 
   const checkForUpdate = useCallback(async (): Promise<boolean> => {
+    if (checkingRef.current) return false;
+    checkingRef.current = true;
     setStatus({ kind: "checking" });
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
-      const result = await check();
+      const proxy = updateProxy.trim();
+      const result = await check({
+        timeout: UPDATE_REQUEST_TIMEOUT_MS,
+        ...(proxy ? { proxy } : {}),
+      });
       if (result) {
         setPendingUpdate(result);
         setStatus({ kind: "available", update: result });
@@ -95,10 +105,18 @@ export function UpdateProvider({ children }: UpdateProviderProps) {
       // Log at error level so it shows in any console, and surface it in state
       // so Settings UI can report what went wrong instead of failing silently.
       console.error("[UpdateProvider] Update check failed:", err);
-      setStatus({ kind: "error", message: String(err) });
+      const detail = err instanceof Error
+        ? [err.message, err.cause ? String(err.cause) : ""].filter(Boolean).join(" — ")
+        : String(err);
+      setStatus({
+        kind: "error",
+        message: `${detail} (endpoint: GitHub Releases${updateProxy.trim() ? ", custom proxy enabled" : ", direct/system route"})`,
+      });
       return false;
+    } finally {
+      checkingRef.current = false;
     }
-  }, []);
+  }, [updateProxy]);
 
   const installUpdate = useCallback(async () => {
     if (!pendingUpdate) return;
