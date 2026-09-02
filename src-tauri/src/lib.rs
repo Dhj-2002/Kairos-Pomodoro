@@ -57,17 +57,13 @@ pub fn run() {
         .manage(MenubarState::new())
         .setup(|app| {
             // Startup must never become headless merely because an optional
-            // migration, tray, or mini-window feature failed on this Mac.
+            // migration or menu-bar setup failed on this Mac.
             if let Err(error) = install_bundled_database_if_missing(app.handle()) {
                 eprintln!("Kairos database migration failed: {error}");
             }
             if let Err(error) = setup_menubar_tray(app) {
                 eprintln!("Kairos tray setup failed: {error}");
             }
-            if let Err(error) = commands::window::setup_mini_click_through(app.handle()) {
-                eprintln!("Kairos mini-window setup failed: {error}");
-            }
-
             // macOS can finish launching an application without surfacing its
             // initial window. Explicitly restore it after all setup work.
             if let Err(error) = commands::window::restore_main_window(app.handle()) {
@@ -81,8 +77,7 @@ pub fn run() {
     app.run(|app_handle, event| {
         #[cfg(desktop)]
         match event {
-            // window lifecycle step 1: Closing the main window returns to the
-            // always-visible mini window instead of destroying the webview.
+            // Closing the main window keeps the menu-bar application alive.
             RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::CloseRequested { api, .. },
@@ -93,16 +88,7 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
-            // window lifecycle step 2: The mini window has no close control and
-            // ignores accidental system close requests.
-            RunEvent::WindowEvent {
-                label,
-                event: WindowEvent::CloseRequested { api, .. },
-                ..
-            } if label == "mini" => {
-                api.prevent_close();
-            }
-            // window lifecycle step 3: Only the explicit tray Quit command is
+            // Only the explicit menu-bar Quit command is
             // allowed to terminate the background application.
             RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
                 api.prevent_exit();

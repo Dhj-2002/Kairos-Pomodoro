@@ -11,11 +11,10 @@ vi.mock("@/lib/db", () => ({ getActiveTimeBlock, getDueReminderBlocks, markTimeB
 vi.mock("@/lib/notifications", () => ({ sendNotification }));
 
 import {
-  buildScheduleWindowStatus,
+  formatScheduleMenuBarLabel,
   refreshScheduleRuntime,
   useScheduleRuntimeStore,
 } from "@/features/schedule/use-schedule-runtime";
-import { DEFAULT_CATEGORY_COLOR } from "@/lib/constants";
 
 const active = {
   id: 3,
@@ -47,20 +46,9 @@ beforeEach(() => {
 });
 
 describe("schedule runtime", () => {
-  it("builds display-only state for the Windows mini window", () => {
-    expect(buildScheduleWindowStatus(active)).toMatchObject({
-      active: true,
-      label: "Paper writing",
-      color: "#4F46E5",
-      endTime: active.end_time,
-    });
-    expect(buildScheduleWindowStatus(null)).toEqual({
-      active: false,
-      label: "Scheduled focus",
-      color: DEFAULT_CATEGORY_COLOR,
-      endTime: null,
-      remainingSeconds: 0,
-    });
+  it("formats the macOS menu-bar as one schedule line", () => {
+    expect(formatScheduleMenuBarLabel(active)).toMatch(/^Paper writing · \d+h \d+m remaining$/);
+    expect(formatScheduleMenuBarLabel(null)).toBe("");
   });
 
   it("sends exactly one schedule alert without starting a timer session", async () => {

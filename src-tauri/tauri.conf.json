@@ -24,26 +24,6 @@
         "center": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
-      },
-      {
-        "label": "mini",
-        "title": "Kairos Schedule",
-        "width": 360,
-        "height": 84,
-        "minWidth": 360,
-        "minHeight": 84,
-        "maxWidth": 360,
-        "maxHeight": 84,
-        "decorations": false,
-        "transparent": true,
-        "resizable": false,
-        "maximizable": false,
-        "minimizable": false,
-        "closable": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "shadow": false,
-        "visible": false
       }
     ],
     "security": {

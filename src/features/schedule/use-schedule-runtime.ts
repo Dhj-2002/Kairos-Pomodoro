@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { emitTo } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import {
   getActiveTimeBlock,
   getDueReminderBlocks,
@@ -9,19 +9,7 @@ import {
 } from "@/lib/db";
 import { sendNotification } from "@/lib/notifications";
 import { isTauri } from "@/lib/tauri";
-import { DEFAULT_CATEGORY_COLOR } from "@/lib/constants";
-import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
 import { parseDbDateTime } from "@/lib/time";
-
-export const SCHEDULE_WINDOW_EVENT = "schedule:status";
-
-export interface ScheduleWindowStatus {
-  active: boolean;
-  label: string;
-  color: string;
-  endTime: string | null;
-  remainingSeconds: number;
-}
 
 interface ScheduleRuntimeState {
   activeBlock: TimeBlockWithMeta | null;
@@ -35,22 +23,20 @@ function remainingFor(block: TimeBlockWithMeta | null): number {
   return Math.max(0, Math.ceil((parseDbDateTime(block.end_time).getTime() - Date.now()) / 1000));
 }
 
-export function buildScheduleWindowStatus(block: TimeBlockWithMeta | null): ScheduleWindowStatus {
-  const remainingSeconds = remainingFor(block);
-  return {
-    active: Boolean(block && remainingSeconds > 0),
-    // The mini window names the scheduled block itself; a tag controls color
-    // only and must never replace the user-authored block name.
-    label: block?.title || block?.task_name || "Scheduled focus",
-    color: block ? resolveScheduleBlockColor(block) : DEFAULT_CATEGORY_COLOR,
-    endTime: block?.end_time ?? null,
-    remainingSeconds,
-  };
+export function formatScheduleMenuBarLabel(block: TimeBlockWithMeta | null): string {
+  const seconds = remainingFor(block);
+  if (!block || seconds <= 0) return "";
+  const totalMinutes = Math.ceil(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const remaining = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  const name = block.title || block.task_name || "Scheduled focus";
+  return `${name} · ${remaining} remaining`;
 }
 
-function publishScheduleWindowStatus(block: TimeBlockWithMeta | null): void {
+function publishScheduleMenuBarStatus(block: TimeBlockWithMeta | null): void {
   if (!isTauri()) return;
-  void emitTo("mini", SCHEDULE_WINDOW_EVENT, buildScheduleWindowStatus(block)).catch(() => {});
+  void invoke("menubar_set_title", { title: formatScheduleMenuBarLabel(block) }).catch(() => {});
 }
 
 export const useScheduleRuntimeStore = create<ScheduleRuntimeState>((set, get) => ({
@@ -59,14 +45,14 @@ export const useScheduleRuntimeStore = create<ScheduleRuntimeState>((set, get) =
   setActiveBlock: (activeBlock) => {
     const remainingSeconds = remainingFor(activeBlock);
     set({ activeBlock, remainingSeconds });
-    publishScheduleWindowStatus(activeBlock);
+    publishScheduleMenuBarStatus(activeBlock);
   },
   tick: () => {
     const activeBlock = get().activeBlock;
     const remainingSeconds = remainingFor(activeBlock);
     const nextBlock = remainingSeconds > 0 ? activeBlock : null;
     set({ remainingSeconds, activeBlock: nextBlock });
-    publishScheduleWindowStatus(nextBlock);
+    publishScheduleMenuBarStatus(nextBlock);
   },
 }));
 
@@ -95,7 +81,7 @@ export async function refreshScheduleRuntime(): Promise<void> {
 
 /** Keep schedule awareness alive while the main webview is open or hidden.
  * Step 1 refreshes active schedule/reminder state, step 2 ticks the absolute
- * deadline, and both publish display-only state to the Windows mini window.
+ * deadline, and both publish display-only state to the macOS menu bar.
  * No Timer action or session write occurs here. */
 export function useScheduleRuntime(enabled: boolean): void {
   useEffect(() => {
