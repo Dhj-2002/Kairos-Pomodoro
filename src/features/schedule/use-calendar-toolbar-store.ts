@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export interface CalendarToolbarControls {
+  selectedDateMs: number;
   rangeStartMs: number;
   rangeEndMs: number;
   openTemplates: () => void;
@@ -16,6 +17,7 @@ interface CalendarToolbarStore extends CalendarToolbarControls {
 }
 
 const EMPTY_CONTROLS: CalendarToolbarControls = {
+  selectedDateMs: 0,
   rangeStartMs: 0,
   rangeEndMs: 0,
   openTemplates: () => undefined,

@@ -193,6 +193,7 @@ export function CalendarDashboard() {
   useEffect(() => {
     // sidebar controls step 1: Publish only the controls retained for Calendar.
     useCalendarToolbarStore.getState().register({
+      selectedDateMs: centerDate.getTime(),
       rangeStartMs: rangeStart.getTime(),
       rangeEndMs: rangeEnd.getTime(),
       openTemplates,
@@ -203,7 +204,7 @@ export function CalendarDashboard() {
 
     // sidebar controls step 2: Remove route-local callbacks when Calendar exits.
     return () => useCalendarToolbarStore.getState().clear();
-  }, [rangeStart.getTime(), rangeEnd.getTime(), openTemplates, handlePrev, handleNext, handleToday]);
+  }, [centerDate.getTime(), rangeStart.getTime(), rangeEnd.getTime(), openTemplates, handlePrev, handleNext, handleToday]);
 
   const reload = useCallback(() => {
     loadedRef.current = null;

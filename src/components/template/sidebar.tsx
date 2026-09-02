@@ -11,8 +11,6 @@ import {
   PanelLeftOpen,
   BookOpen,
   LayoutTemplate,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useCalendarToolbarStore } from "@/features/schedule/use-calendar-toolbar-store";
@@ -42,14 +40,6 @@ export function Sidebar({
   const navigate = useNavigate();
   const calendarTools = useCalendarToolbarStore();
   const showCalendarTools = location.pathname === "/" && calendarTools.active;
-
-  const formatDateRange = (startMs: number, endMs: number) => {
-    const startDate = new Date(startMs);
-    const endDate = new Date(endMs);
-    const start = startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const end = endDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${start} – ${end}`;
-  };
 
   return (
     <m.aside
@@ -141,44 +131,16 @@ export function Sidebar({
             {!isCollapsed && <span>Templates</span>}
           </Button>
 
-          {/* calendar sidebar step 2: Slide the visible seven-day range without using
-              any vertical space above the calendar grid. */}
-          {isCollapsed ? (
-            <div className="flex flex-col items-center gap-2">
-              <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={calendarTools.showPreviousDay} title="Previous day">
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={calendarTools.showNextDay} title="Next day">
-                <ChevronRight className="size-4" />
-              </Button>
-              <Button variant="ghost" size="icon" intent="sahara" shape="rounded-full" onClick={calendarTools.showToday} title="Today">
-                <Calendar className="size-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-sahara-border/25 bg-sahara-surface/60 p-2.5">
-              <div className="flex items-center justify-between gap-1">
-                <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={calendarTools.showPreviousDay} title="Previous day">
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="text-[11px] font-bold tabular-nums text-sahara-text whitespace-nowrap">
-                  {formatDateRange(calendarTools.rangeStartMs, calendarTools.rangeEndMs)}
-                </span>
-                <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={calendarTools.showNextDay} title="Next day">
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-              <Button variant="ghost" size="xs" intent="sahara" fullWidth onClick={calendarTools.showToday} className="mt-1 text-[10px] font-bold tracking-widest uppercase">
-                Today
-              </Button>
-            </div>
-          )}
+          {/* Date navigation and its tag distribution are one synchronized card. */}
+          <TodayTagSummary
+            isCollapsed={isCollapsed}
+            selectedDateMs={calendarTools.selectedDateMs}
+            onPreviousDay={calendarTools.showPreviousDay}
+            onNextDay={calendarTools.showNextDay}
+            onToday={calendarTools.showToday}
+          />
         </div>
         )}
-      </div>
-
-      <div className="px-3 mb-4 mt-3 shrink-0">
-        <TodayTagSummary isCollapsed={isCollapsed} />
       </div>
 
       <div className="px-3 space-y-1 border-t border-sahara-border/20 pt-3 shrink-0">

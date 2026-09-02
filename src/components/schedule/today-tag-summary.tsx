@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { getCategoryBreakdown, type CategoryBreakdown } from "@/lib/db";
 import { formatTotalTime } from "@/lib/session-utils";
 import { UNTAGGED_BLOCK_COLOR } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { toLocalISODate } from "@/features/schedule/calendar-view";
 
 export interface TodayTagRow {
   id: number | null;
@@ -29,15 +31,32 @@ export function buildTodayTagRows(breakdowns: CategoryBreakdown[]): TodayTagRow[
 
 interface TodayTagSummaryProps {
   isCollapsed: boolean;
+  selectedDateMs: number;
+  onPreviousDay: () => void;
+  onNextDay: () => void;
+  onToday: () => void;
 }
 
-/** Sidebar replacement for Start Session: today's completed time by tag. */
-export function TodayTagSummary({ isCollapsed }: TodayTagSummaryProps) {
+/** One date navigator and completed-time distribution for its selected day. */
+export function TodayTagSummary({
+  isCollapsed,
+  selectedDateMs,
+  onPreviousDay,
+  onNextDay,
+  onToday,
+}: TodayTagSummaryProps) {
   const [breakdowns, setBreakdowns] = useState<CategoryBreakdown[]>([]);
+  const selectedDate = useMemo(() => new Date(selectedDateMs), [selectedDateMs]);
+  const selectedDateKey = toLocalISODate(selectedDate);
+  const todayKey = toLocalISODate(new Date());
+  const isToday = selectedDateKey === todayKey;
+  const dateLabel = isToday
+    ? "Today"
+    : selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
   const refresh = useCallback(async () => {
-    setBreakdowns(await getCategoryBreakdown().catch(() => []));
-  }, []);
+    setBreakdowns(await getCategoryBreakdown(selectedDateKey, selectedDateKey).catch(() => []));
+  }, [selectedDateKey]);
 
   useEffect(() => {
     // today tag summary step 1: Load immediately when the sidebar mounts.
@@ -60,18 +79,42 @@ export function TodayTagSummary({ isCollapsed }: TodayTagSummaryProps) {
     return (
       <div
         className="mx-auto flex size-11 items-center justify-center rounded-2xl border border-sahara-border/25 bg-sahara-surface/70 text-sahara-text-muted"
-        title={`Today by tag · ${formatTotalTime(totalSeconds)}`}
+        title={`${dateLabel} by tag · ${formatTotalTime(totalSeconds)}`}
       >
-        <BarChart2 className="size-4" />
+        <div className="flex flex-col items-center gap-1">
+          <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={onPreviousDay} title="Previous day">
+            <ChevronLeft className="size-3.5" />
+          </Button>
+          <BarChart2 className="size-4" />
+          <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={onNextDay} title="Next day">
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <section className="rounded-2xl border border-sahara-border/25 bg-sahara-surface/70 p-3">
+      <div className="mb-3 flex items-center justify-between gap-1 border-b border-sahara-border/20 pb-2">
+        <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={onPreviousDay} title="Previous day">
+          <ChevronLeft className="size-4" />
+        </Button>
+        <button
+          type="button"
+          onClick={onToday}
+          className="min-w-0 flex-1 truncate text-center text-[11px] font-bold uppercase tracking-widest text-sahara-text hover:text-sahara-primary"
+          title={isToday ? "Today" : "Return to today"}
+        >
+          {dateLabel}
+        </button>
+        <Button variant="ghost" size="icon" intent="default" shape="rounded-full" onClick={onNextDay} title="Next day">
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-sahara-text-muted">
-          Today by Tag
+          <span className="inline-flex items-center gap-1.5"><Calendar className="size-3" />By Tag</span>
         </span>
         <span className="text-[10px] font-semibold tabular-nums text-sahara-text-secondary">
           {formatTotalTime(totalSeconds)}
