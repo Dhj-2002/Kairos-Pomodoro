@@ -25,3 +25,12 @@ export function formatMinutesAsDuration(totalMinutes: number): string {
   const minutes = safeMinutes % 60;
   return `${hours} ${hours === 1 ? "hour" : "hours"} ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
 }
+
+/** Format remaining time without displaying a meaningless zero-hour segment. */
+export function formatMinutesRemaining(totalMinutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(totalMinutes));
+  if (safeMinutes < 60) {
+    return `${safeMinutes} ${safeMinutes === 1 ? "minute" : "minutes"}`;
+  }
+  return formatMinutesAsDuration(safeMinutes);
+}

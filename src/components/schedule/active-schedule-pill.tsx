@@ -1,6 +1,6 @@
 import { Clock3 } from "lucide-react";
 import { useScheduleRuntimeStore } from "@/features/schedule/use-schedule-runtime";
-import { formatMinutesAsDuration } from "@/lib/session-utils";
+import { formatMinutesRemaining } from "@/lib/session-utils";
 
 export function ActiveSchedulePill() {
   const activeBlock = useScheduleRuntimeStore((state) => state.activeBlock);
@@ -16,7 +16,7 @@ export function ActiveSchedulePill() {
       </span>
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-sahara-text">{label}</span>
-        <span className="block text-[10px] font-bold uppercase tracking-widest text-sahara-primary">{formatMinutesAsDuration(minutes)} remaining</span>
+        <span className="block text-[10px] font-bold uppercase tracking-widest text-sahara-primary">{formatMinutesRemaining(minutes)} remaining</span>
       </span>
     </div>
   );

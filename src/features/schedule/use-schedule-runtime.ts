@@ -10,7 +10,7 @@ import {
 import { sendNotification } from "@/lib/notifications";
 import { isTauri } from "@/lib/tauri";
 import { parseDbDateTime } from "@/lib/time";
-import { formatMinutesAsDuration } from "@/lib/session-utils";
+import { formatMinutesRemaining } from "@/lib/session-utils";
 
 interface ScheduleRuntimeState {
   activeBlock: TimeBlockWithMeta | null;
@@ -28,7 +28,7 @@ export function formatScheduleMenuBarLabel(block: TimeBlockWithMeta | null): str
   const seconds = remainingFor(block);
   if (!block || seconds <= 0) return "";
   const totalMinutes = Math.ceil(seconds / 60);
-  const remaining = formatMinutesAsDuration(totalMinutes);
+  const remaining = formatMinutesRemaining(totalMinutes);
   const name = block.title || block.task_name || "Scheduled focus";
   return `${name} · ${remaining} remaining`;
 }

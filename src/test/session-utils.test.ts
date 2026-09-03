@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatTime, formatDuration, formatTotalTime, formatMinutesAsDuration } from "@/lib/session-utils";
+import {
+  formatTime,
+  formatDuration,
+  formatTotalTime,
+  formatMinutesAsDuration,
+  formatMinutesRemaining,
+} from "@/lib/session-utils";
 
 describe("formatDuration", () => {
   it("rounds sub-minute durations into the shared hours/minutes form", () => {
@@ -64,5 +70,17 @@ describe("formatMinutesAsDuration", () => {
 
   it("formats mixed hours and minutes", () => {
     expect(formatMinutesAsDuration(975)).toBe("16 hours 15 minutes");
+  });
+});
+
+describe("formatMinutesRemaining", () => {
+  it("omits the zero-hour segment when less than one hour remains", () => {
+    expect(formatMinutesRemaining(30)).toBe("30 minutes");
+    expect(formatMinutesRemaining(1)).toBe("1 minute");
+    expect(formatMinutesRemaining(0)).toBe("0 minutes");
+  });
+
+  it("keeps hours when at least one hour remains", () => {
+    expect(formatMinutesRemaining(75)).toBe("1 hour 15 minutes");
   });
 });
