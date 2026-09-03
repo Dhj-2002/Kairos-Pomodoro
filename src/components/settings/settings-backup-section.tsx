@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { exportBackup, importBackup } from "@/lib/backup";
+import { downloadAndMergeCalendarSync, uploadCalendarSync } from "@/lib/calendar-sync";
 import { setSetting, getSetting } from "@/lib/db";
 import { isTauri } from "@/lib/tauri";
-import { Download, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { CloudDownload, CloudUpload, Download, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const LAST_BACKUP_KEY = "last_backup_at";
 
@@ -18,6 +19,36 @@ export function SettingsBackupSection() {
   const [restoreStatus, setRestoreStatus] = useState<Status>({ kind: "idle" });
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<Status>({ kind: "idle" });
+
+  const handleSyncUpload = async () => {
+    setSyncStatus({ kind: "working", label: "Preparing calendar sync file…" });
+    const res = await uploadCalendarSync();
+    if (res.ok) {
+      setSyncStatus({ kind: "success", label: `Calendar uploaded to ${res.path}.` });
+    } else if (res.error === "Cancelled") {
+      setSyncStatus({ kind: "idle" });
+    } else {
+      setSyncStatus({ kind: "error", label: res.error ?? "Calendar upload failed." });
+    }
+  };
+
+  const handleSyncDownload = async () => {
+    setSyncStatus({ kind: "working", label: "Merging calendar…" });
+    const res = await downloadAndMergeCalendarSync();
+    if (res.ok) {
+      const changed = (res.inserted ?? 0) + (res.updated ?? 0) + (res.deleted ?? 0);
+      setSyncStatus({
+        kind: "success",
+        label: `Merged ${changed} changes · ${res.unchanged ?? 0} unchanged · ${res.conflicts ?? 0} conflicts. Refreshing…`,
+      });
+      window.setTimeout(() => window.location.reload(), 700);
+    } else if (res.error === "Cancelled") {
+      setSyncStatus({ kind: "idle" });
+    } else {
+      setSyncStatus({ kind: "error", label: res.error ?? "Calendar merge failed." });
+    }
+  };
 
   // Load last backup timestamp lazily on first interaction.
   const refreshLastBackup = async () => {
@@ -92,6 +123,28 @@ export function SettingsBackupSection() {
           journal, and time blocks) to a single JSON file. Restore later or move
           your data to another device.
         </p>
+
+        <div className="pt-4 border-t border-sahara-border/20 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-sahara-text">Manual calendar sync</p>
+            <p className="text-xs text-sahara-text-muted mt-0.5">
+              Save the same sync file in iCloud Drive. Upload on the source device, then download and merge on the other device. Existing local calendar data is preserved.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" intent="sahara" size="sm" shape="rounded-xl"
+              disabled={syncStatus.kind === "working"} onClick={handleSyncUpload}
+              className="gap-2 text-[11px]">
+              <CloudUpload className="size-3.5" /> Upload this device
+            </Button>
+            <Button variant="outline" intent="sahara" size="sm" shape="rounded-xl"
+              disabled={syncStatus.kind === "working"} onClick={handleSyncDownload}
+              className="gap-2 text-[11px]">
+              <CloudDownload className="size-3.5" /> Download & merge
+            </Button>
+          </div>
+          <StatusLine status={syncStatus} />
+        </div>
 
         {/* Export */}
         <div className="pt-4 border-t border-sahara-border/20 space-y-3">

@@ -5,7 +5,7 @@ import { isTauri } from "@/lib/tauri";
 
 /** Schema version this build writes/accepts. Must stay in sync with schema.ts targetVersion. */
 export const BACKUP_FORMAT_VERSION = 1;
-export const BACKUP_SCHEMA_VERSION = 8;
+export const BACKUP_SCHEMA_VERSION = 9;
 export const BACKUP_APP_ID = "kairos";
 
 /** Tables that get dumped on export and re-inserted on restore, in dependency order. */
@@ -90,6 +90,10 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     "source_template_block_id",
     "notification_enabled",
     "reminded_at",
+    "sync_id",
+    "updated_at",
+    "deleted_at",
+    "device_id",
   ],
   journal_entries: ["id", "date", "content", "created_at", "updated_at"],
   badge_awards: ["badge_id", "earned_at", "trigger_session_id", "announced_at"],

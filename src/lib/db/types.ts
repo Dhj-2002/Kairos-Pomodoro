@@ -121,6 +121,11 @@ export interface TimeBlock {
   source_template_block_id: number | null;
   notification_enabled: number;
   reminded_at: string | null;
+  /** Added by schema v9; optional keeps fixtures and pre-migration rows compatible. */
+  sync_id?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+  device_id?: string | null;
 }
 
 /** A reusable schedule. Applying it creates independent TimeBlock snapshots. */

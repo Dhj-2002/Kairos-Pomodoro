@@ -80,14 +80,14 @@ describe("time-blocks repository", () => {
   it("updateTimeBlock builds a dynamic SET clause", async () => {
     await updateTimeBlock(7, { title: "Renamed", color: "#ff0000" });
     const [sql, params] = execute.mock.calls[0];
-    expect(sql).toMatch(/UPDATE time_blocks SET title = \$1, color = \$2 WHERE id = \$3/);
+    expect(sql).toMatch(/UPDATE time_blocks SET title = \$1, color = \$2, updated_at = CURRENT_TIMESTAMP, deleted_at = NULL WHERE id = \$3/);
     expect(params).toEqual(["Renamed", "#ff0000", 7]);
   });
 
   it("updateTimeBlock sets session_id to link a logged session", async () => {
     await updateTimeBlock(3, { session_id: 9 });
     const [sql, params] = execute.mock.calls[0];
-    expect(sql).toMatch(/UPDATE time_blocks SET session_id = \$1 WHERE id = \$2/);
+    expect(sql).toMatch(/UPDATE time_blocks SET session_id = \$1, updated_at = CURRENT_TIMESTAMP, deleted_at = NULL WHERE id = \$2/);
     expect(params).toEqual([9, 3]);
   });
 
@@ -96,10 +96,10 @@ describe("time-blocks repository", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("deleteTimeBlock deletes by id", async () => {
+  it("deleteTimeBlock leaves a sync tombstone", async () => {
     await deleteTimeBlock(9);
     const [sql, params] = execute.mock.calls[0];
-    expect(sql).toMatch(/DELETE FROM time_blocks WHERE id = \$1/);
+    expect(sql).toMatch(/UPDATE time_blocks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = \$1/);
     expect(params).toEqual([9]);
   });
 
@@ -178,7 +178,7 @@ describe("time-blocks repository", () => {
   it("markTimeBlockCompleted sets the completed flag", async () => {
     await markTimeBlockCompleted(5, true);
     const [sql, params] = execute.mock.calls[0];
-    expect(sql).toMatch(/UPDATE time_blocks SET completed = \$1 WHERE id = \$2/);
+    expect(sql).toMatch(/UPDATE time_blocks SET completed = \$1, updated_at = CURRENT_TIMESTAMP WHERE id = \$2/);
     expect(params).toEqual([1, 5]);
   });
 });

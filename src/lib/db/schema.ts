@@ -291,9 +291,28 @@ export async function initDb(): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_quick_blocks_category ON quick_blocks(category_id)",
       "CREATE INDEX IF NOT EXISTS idx_sequence_template_items_category ON sequence_template_items(category_id)",
     ],
+    9: [
+      // Stable cross-device identity and tombstones for manual file sync.
+      "ALTER TABLE time_blocks ADD COLUMN sync_id TEXT",
+      "ALTER TABLE time_blocks ADD COLUMN updated_at DATETIME",
+      "ALTER TABLE time_blocks ADD COLUMN deleted_at DATETIME",
+      "ALTER TABLE time_blocks ADD COLUMN device_id TEXT",
+      // Existing databases on Windows/macOS originated from the same migrated
+      // snapshot, so derive legacy IDs from their preserved row IDs. If each
+      // device generated random IDs here, the first sync would duplicate every
+      // historical block.
+      "UPDATE time_blocks SET sync_id = printf('legacy-%016x', id) WHERE sync_id IS NULL",
+      "UPDATE time_blocks SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP) WHERE updated_at IS NULL",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_time_blocks_sync_id ON time_blocks(sync_id)",
+      `CREATE TABLE IF NOT EXISTS calendar_sync_state (
+        sync_id TEXT PRIMARY KEY,
+        last_seen_updated_at DATETIME NOT NULL,
+        content_hash TEXT NOT NULL
+      )`,
+    ],
   };
 
-  const targetVersion = 8;
+  const targetVersion = 9;
 
   for (let v = currentVersion + 1; v <= targetVersion; v++) {
     const statements = migrations[v];

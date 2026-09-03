@@ -202,7 +202,7 @@ export async function isTemplateAppliedOnDate(
   const database = await getDb();
   const rows = await database.select<{ count: number }[]>(
     `SELECT COUNT(*) AS count FROM time_blocks
-     WHERE source_template_id = $1 AND date(start_time) = $2`,
+     WHERE deleted_at IS NULL AND source_template_id = $1 AND date(start_time) = $2`,
     [templateId, date],
   );
   return (rows[0]?.count ?? 0) > 0;

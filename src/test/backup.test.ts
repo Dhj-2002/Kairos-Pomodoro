@@ -26,7 +26,7 @@ describe("backup constants", () => {
 
   it("exposes the current schema version", () => {
     // Must stay in sync with the targetVersion in schema.ts.
-    expect(BACKUP_SCHEMA_VERSION).toBe(8);
+    expect(BACKUP_SCHEMA_VERSION).toBe(9);
   });
 });
 

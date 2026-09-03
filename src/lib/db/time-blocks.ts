@@ -37,8 +37,9 @@ export async function addTimeBlock(
   const result = await connection.execute(
     `INSERT INTO time_blocks (
        title, start_time, end_time, task_id, category_id, color, session_id,
-       source_template_id, source_template_block_id, notification_enabled, reminded_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+       source_template_id, source_template_block_id, notification_enabled, reminded_at,
+       sync_id, updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, lower(hex(randomblob(16))), CURRENT_TIMESTAMP)`,
     [
       input.title,
       input.start_time,
@@ -133,6 +134,7 @@ export async function updateTimeBlock(
 
   if (fields.length === 0) return;
   values.push(id);
+  fields.push("updated_at = CURRENT_TIMESTAMP", "deleted_at = NULL");
   await connection.execute(
     `UPDATE time_blocks SET ${fields.join(", ")} WHERE id = $${paramIndex}`,
     values,
@@ -141,13 +143,16 @@ export async function updateTimeBlock(
 
 export async function deleteTimeBlock(id: number, database?: Database): Promise<void> {
   const connection = database ?? (await getDb());
-  await connection.execute(`DELETE FROM time_blocks WHERE id = $1`, [id]);
+  await connection.execute(
+    `UPDATE time_blocks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+    [id],
+  );
 }
 
 export async function getTimeBlock(id: number, database?: Database): Promise<TimeBlock | null> {
   const connection = database ?? (await getDb());
   const rows = await connection.select<TimeBlock[]>(
-    `SELECT * FROM time_blocks WHERE id = $1`,
+    `SELECT * FROM time_blocks WHERE id = $1 AND deleted_at IS NULL`,
     [id],
   );
   return rows.length > 0 ? rows[0] : null;
@@ -167,7 +172,8 @@ export async function getWeekTimeBlocks(
     FROM time_blocks tb
     LEFT JOIN tasks t ON tb.task_id = t.id
     LEFT JOIN categories c ON tb.category_id = c.id
-    WHERE date(tb.start_time) >= $1 AND date(tb.start_time) <= $2
+    WHERE tb.deleted_at IS NULL
+      AND date(tb.start_time) >= $1 AND date(tb.start_time) <= $2
     ORDER BY tb.start_time ASC`,
     [weekStart, weekEnd],
   );
@@ -178,7 +184,7 @@ export async function markTimeBlockCompleted(
   completed: boolean,
 ): Promise<void> {
   const database = await getDb();
-  await database.execute(`UPDATE time_blocks SET completed = $1 WHERE id = $2`, [
+  await database.execute(`UPDATE time_blocks SET completed = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [
     completed ? 1 : 0,
     id,
   ]);
@@ -195,7 +201,7 @@ export async function getActiveTimeBlock(
      FROM time_blocks tb
      LEFT JOIN tasks t ON tb.task_id = t.id
      LEFT JOIN categories c ON tb.category_id = c.id
-     WHERE tb.start_time <= $1 AND tb.end_time > $1
+     WHERE tb.deleted_at IS NULL AND tb.start_time <= $1 AND tb.end_time > $1
      ORDER BY tb.start_time DESC, tb.id DESC
      LIMIT 1`,
     [localNow],
@@ -215,7 +221,8 @@ export async function getDueReminderBlocks(
      FROM time_blocks tb
      LEFT JOIN tasks t ON tb.task_id = t.id
      LEFT JOIN categories c ON tb.category_id = c.id
-     WHERE tb.notification_enabled = 1
+     WHERE tb.deleted_at IS NULL
+       AND tb.notification_enabled = 1
        AND tb.reminded_at IS NULL
        AND tb.start_time <= $1
        AND tb.end_time > $1
