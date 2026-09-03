@@ -47,7 +47,9 @@ beforeEach(() => {
 
 describe("schedule runtime", () => {
   it("formats the macOS menu-bar as one schedule line", () => {
-    expect(formatScheduleMenuBarLabel(active)).toMatch(/^Paper writing · \d+h \d+m remaining$/);
+    expect(formatScheduleMenuBarLabel(active)).toMatch(
+      /^Paper writing · \d+ hours? \d+ minutes? remaining$/,
+    );
     expect(formatScheduleMenuBarLabel(null)).toBe("");
   });
 
