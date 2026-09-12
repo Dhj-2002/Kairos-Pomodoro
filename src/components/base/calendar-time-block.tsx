@@ -14,6 +14,8 @@ interface CalendarTimeBlockProps {
   block: TimeBlockWithMeta;
   topPx: number;
   heightPx: number;
+  displayStart?: Date;
+  displayEnd?: Date;
   columnIndex?: number;
   columnCount?: number;
   stackIndex?: number;
@@ -36,6 +38,11 @@ function formatRange(startStr: string, endStr: string): string {
   return `${formatTime24Hour(startStr)} – ${formatTime24Hour(endStr)}`;
 }
 
+function formatDisplayRange(start: Date, end: Date): string {
+  const time = (value: Date) => `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  return `${time(start)} – ${time(end)}`;
+}
+
 /** Preserve time geometry while giving the visible card proportional breathing room. */
 export function getCalendarBlockVisualInset(heightPx: number): number {
   // visual density step 1: A 15-minute cell keeps nearly all of its hit area.
@@ -54,6 +61,8 @@ export function CalendarTimeBlock({
   block,
   topPx,
   heightPx,
+  displayStart,
+  displayEnd,
   columnIndex = 0,
   columnCount = 1,
   stackIndex = 0,
@@ -185,7 +194,7 @@ export function CalendarTimeBlock({
             ? "shadow-lg"
             : isLogged
             ? "bg-sahara-bg/80 backdrop-blur-sm"
-            : "border-dashed bg-sahara-bg/60 backdrop-blur-sm",
+            : "bg-sahara-bg/60 backdrop-blur-sm",
         )}
         style={{
           // calendar block step 3: Insets create separation without changing
@@ -215,7 +224,9 @@ export function CalendarTimeBlock({
                 "mt-0.5 text-left text-[9px] tabular-nums",
                 isSelected ? "text-white/75" : "text-sahara-text-muted",
               )}>
-                {formatRange(block.start_time, block.end_time)}
+                {displayStart && displayEnd
+                  ? formatDisplayRange(displayStart, displayEnd)
+                  : formatRange(block.start_time, block.end_time)}
               </p>
             )}
           </div>
@@ -225,7 +236,7 @@ export function CalendarTimeBlock({
             keydown so Enter/Space stay exclusive to their own action and never
             bubble up to the card-level onView keyboard handler. */}
         <div
-          className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute top-1 right-1 z-50 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
           onKeyDown={(e) => e.stopPropagation()}
         >
           {onEdit && (

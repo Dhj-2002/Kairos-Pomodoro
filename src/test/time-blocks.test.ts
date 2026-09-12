@@ -171,7 +171,8 @@ describe("time-blocks repository", () => {
     const [sql, params] = select.mock.calls[0];
     expect(sql).toMatch(/LEFT JOIN tasks t/);
     expect(sql).toMatch(/LEFT JOIN categories c/);
-    expect(sql).toMatch(/date\(tb\.start_time\) >= \$1/);
+    expect(sql).toMatch(/date\(tb\.start_time\) <= \$2/);
+    expect(sql).toMatch(/date\(tb\.end_time\) >= \$1/);
     expect(params).toEqual(["2026-07-01", "2026-07-07"]);
   });
 

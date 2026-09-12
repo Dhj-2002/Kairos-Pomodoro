@@ -111,10 +111,13 @@ export async function uploadCalendarSync(): Promise<CalendarSyncResult> {
     const ownDeviceId = await deviceId();
     const items = await readCalendarItems();
     const lastPath = await getSetting(LAST_SYNC_PATH_KEY);
-    const path = await save({
-      defaultPath: lastPath ?? "Kairos-calendar-sync.json",
+    // Once an iCloud sync file has been selected, always replace that exact
+    // file. This avoids creating a trail of duplicate sync files and removes
+    // the native "Replace?" dialog from every subsequent sync.
+    const path = lastPath ?? await save({
+      defaultPath: "Kairos-calendar-sync.json",
       filters: [{ name: "Kairos Calendar Sync", extensions: ["json"] }],
-      title: "Upload this device calendar",
+      title: "Choose the iCloud calendar sync file",
     });
     if (!path) return { ok: false, error: "Cancelled" };
     const payload: CalendarSyncFile = {
@@ -169,11 +172,10 @@ export async function downloadAndMergeCalendarSync(): Promise<CalendarSyncResult
   let path: string | null = null;
   try {
     const lastPath = await getSetting(LAST_SYNC_PATH_KEY);
-    const picked = await open({
+    const picked = lastPath ?? await open({
       multiple: false,
-      defaultPath: lastPath ?? undefined,
       filters: [{ name: "Kairos Calendar Sync", extensions: ["json"] }],
-      title: "Download and merge calendar",
+      title: "Choose the iCloud calendar sync file",
     });
     path = typeof picked === "string" ? picked : null;
     if (!path) return { ok: false, error: "Cancelled" };
@@ -272,4 +274,19 @@ export async function downloadAndMergeCalendarSync(): Promise<CalendarSyncResult
   } catch (error) {
     return { ok: false, path: path ?? undefined, error: (error as Error)?.message ?? "Calendar merge failed." };
   }
+}
+
+/** Merge the selected iCloud file into this device, then replace that same
+ * file with the merged state. After the first selection this is one-click and
+ * never asks the user to choose or replace another file. */
+export async function syncCalendarWithICloud(): Promise<CalendarSyncResult> {
+  const lastPath = await getSetting(LAST_SYNC_PATH_KEY);
+  if (!lastPath) {
+    // A source device may be creating the shared file for the first time.
+    return uploadCalendarSync();
+  }
+  const merged = await downloadAndMergeCalendarSync();
+  if (!merged.ok) return merged;
+  const uploaded = await uploadCalendarSync();
+  return uploaded.ok ? { ...merged, path: uploaded.path } : uploaded;
 }

@@ -64,6 +64,14 @@ pub fn run() {
             if let Err(error) = setup_menubar_tray(app) {
                 eprintln!("Kairos tray setup failed: {error}");
             }
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("mini") {
+                let _ = window.show();
+            }
+            #[cfg(target_os = "windows")]
+            if let Err(error) = commands::window::setup_mini_click_through(app.handle()) {
+                eprintln!("Kairos mini-window click-through setup failed: {error}");
+            }
             // macOS can finish launching an application without surfacing its
             // initial window. Explicitly restore it after all setup work.
             if let Err(error) = commands::window::restore_main_window(app.handle()) {
@@ -87,6 +95,13 @@ pub fn run() {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.hide();
                 }
+            }
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "mini" => {
+                api.prevent_close();
             }
             // Only the explicit menu-bar Quit command is
             // allowed to terminate the background application.

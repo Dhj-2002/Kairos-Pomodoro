@@ -173,7 +173,7 @@ export async function getWeekTimeBlocks(
     LEFT JOIN tasks t ON tb.task_id = t.id
     LEFT JOIN categories c ON tb.category_id = c.id
     WHERE tb.deleted_at IS NULL
-      AND date(tb.start_time) >= $1 AND date(tb.start_time) <= $2
+      AND date(tb.start_time) <= $2 AND date(tb.end_time) >= $1
     ORDER BY tb.start_time ASC`,
     [weekStart, weekEnd],
   );

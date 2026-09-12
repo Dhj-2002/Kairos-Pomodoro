@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { exportBackup, importBackup } from "@/lib/backup";
-import { downloadAndMergeCalendarSync, uploadCalendarSync } from "@/lib/calendar-sync";
+import { syncCalendarWithICloud } from "@/lib/calendar-sync";
 import { setSetting, getSetting } from "@/lib/db";
 import { isTauri } from "@/lib/tauri";
-import { CloudDownload, CloudUpload, Download, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Cloud, Download, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const LAST_BACKUP_KEY = "last_backup_at";
 
@@ -21,32 +21,20 @@ export function SettingsBackupSection() {
   const [confirming, setConfirming] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Status>({ kind: "idle" });
 
-  const handleSyncUpload = async () => {
-    setSyncStatus({ kind: "working", label: "Preparing calendar sync file…" });
-    const res = await uploadCalendarSync();
-    if (res.ok) {
-      setSyncStatus({ kind: "success", label: `Calendar uploaded to ${res.path}.` });
-    } else if (res.error === "Cancelled") {
-      setSyncStatus({ kind: "idle" });
-    } else {
-      setSyncStatus({ kind: "error", label: res.error ?? "Calendar upload failed." });
-    }
-  };
-
-  const handleSyncDownload = async () => {
-    setSyncStatus({ kind: "working", label: "Merging calendar…" });
-    const res = await downloadAndMergeCalendarSync();
+  const handleCloudSync = async () => {
+    setSyncStatus({ kind: "working", label: "Merging and updating iCloud…" });
+    const res = await syncCalendarWithICloud();
     if (res.ok) {
       const changed = (res.inserted ?? 0) + (res.updated ?? 0) + (res.deleted ?? 0);
       setSyncStatus({
         kind: "success",
-        label: `Merged ${changed} changes · ${res.unchanged ?? 0} unchanged · ${res.conflicts ?? 0} conflicts. Refreshing…`,
+        label: `Synced ${changed} changes · ${res.unchanged ?? 0} unchanged · ${res.conflicts ?? 0} conflicts. Refreshing…`,
       });
       window.setTimeout(() => window.location.reload(), 700);
     } else if (res.error === "Cancelled") {
       setSyncStatus({ kind: "idle" });
     } else {
-      setSyncStatus({ kind: "error", label: res.error ?? "Calendar merge failed." });
+      setSyncStatus({ kind: "error", label: res.error ?? "iCloud sync failed." });
     }
   };
 
@@ -126,21 +114,16 @@ export function SettingsBackupSection() {
 
         <div className="pt-4 border-t border-sahara-border/20 space-y-3">
           <div>
-            <p className="text-sm font-semibold text-sahara-text">Manual calendar sync</p>
+            <p className="text-sm font-semibold text-sahara-text">iCloud calendar sync</p>
             <p className="text-xs text-sahara-text-muted mt-0.5">
-              Save the same sync file in iCloud Drive. Upload on the source device, then download and merge on the other device. Existing local calendar data is preserved.
+              Select the shared file once. Every later sync automatically merges both devices and replaces only that same iCloud file.
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" intent="sahara" size="sm" shape="rounded-xl"
-              disabled={syncStatus.kind === "working"} onClick={handleSyncUpload}
+              disabled={syncStatus.kind === "working"} onClick={handleCloudSync}
               className="gap-2 text-[11px]">
-              <CloudUpload className="size-3.5" /> Upload this device
-            </Button>
-            <Button variant="outline" intent="sahara" size="sm" shape="rounded-xl"
-              disabled={syncStatus.kind === "working"} onClick={handleSyncDownload}
-              className="gap-2 text-[11px]">
-              <CloudDownload className="size-3.5" /> Download & merge
+              <Cloud className="size-3.5" /> Sync with iCloud
             </Button>
           </div>
           <StatusLine status={syncStatus} />

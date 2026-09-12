@@ -267,7 +267,10 @@ export async function moveCountedTimeBlocks(
 export async function deleteCountedTimeBlock(block: TimeBlockWithMeta): Promise<void> {
   await withSerializedWrite(async (database) => {
     await deleteTimeBlock(block.id, database);
-    if (block.session_id) await deleteSession(block.session_id, database);
+    if (block.session_id) {
+      await database.execute("UPDATE time_blocks SET session_id = NULL WHERE id = $1", [block.id]);
+      await deleteSession(block.session_id, database);
+    }
   });
 }
 
@@ -283,7 +286,10 @@ export async function deleteCountedTimeBlocks(blocks: TimeBlockWithMeta[]): Prom
   await withSerializedWrite(async (database) => {
     for (const block of unique) {
       await deleteTimeBlock(block.id, database);
-      if (block.session_id) await deleteSession(block.session_id, database);
+      if (block.session_id) {
+        await database.execute("UPDATE time_blocks SET session_id = NULL WHERE id = $1", [block.id]);
+        await deleteSession(block.session_id, database);
+      }
     }
   });
 }

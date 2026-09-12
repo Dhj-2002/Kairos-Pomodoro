@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { emitTo } from "@tauri-apps/api/event";
 import {
   getActiveTimeBlock,
   getDueReminderBlocks,
@@ -11,6 +12,16 @@ import { sendNotification } from "@/lib/notifications";
 import { isTauri } from "@/lib/tauri";
 import { parseDbDateTime } from "@/lib/time";
 import { formatMinutesRemaining } from "@/lib/session-utils";
+
+export const SCHEDULE_WINDOW_EVENT = "schedule:status";
+
+export interface ScheduleWindowStatus {
+  active: boolean;
+  label: string;
+  color: string;
+  endTime: string | null;
+  remainingSeconds: number;
+}
 
 interface ScheduleRuntimeState {
   activeBlock: TimeBlockWithMeta | null;
@@ -33,8 +44,23 @@ export function formatScheduleMenuBarLabel(block: TimeBlockWithMeta | null): str
   return `${name} · ${remaining} remaining`;
 }
 
+export function buildScheduleWindowStatus(block: TimeBlockWithMeta | null): ScheduleWindowStatus {
+  const remainingSeconds = remainingFor(block);
+  return {
+    active: Boolean(block && remainingSeconds > 0),
+    label: formatScheduleMenuBarLabel(block) || "No active schedule",
+    color: block?.category_color || block?.color || "#6b8f71",
+    endTime: block?.end_time ?? null,
+    remainingSeconds,
+  };
+}
+
 function publishScheduleMenuBarStatus(block: TimeBlockWithMeta | null): void {
   if (!isTauri()) return;
+  if (navigator.userAgent.includes("Windows")) {
+    void emitTo("mini", SCHEDULE_WINDOW_EVENT, buildScheduleWindowStatus(block)).catch(() => {});
+    return;
+  }
   void invoke("menubar_set_title", { title: formatScheduleMenuBarLabel(block) }).catch(() => {});
 }
 
@@ -80,7 +106,7 @@ export async function refreshScheduleRuntime(): Promise<void> {
 
 /** Keep schedule awareness alive while the main webview is open or hidden.
  * Step 1 refreshes active schedule/reminder state, step 2 ticks the absolute
- * deadline, and both publish display-only state to the macOS menu bar.
+ * deadline, and publish display-only state to the macOS menu bar or Windows mini window.
  * No Timer action or session write occurs here. */
 export function useScheduleRuntime(enabled: boolean): void {
   useEffect(() => {

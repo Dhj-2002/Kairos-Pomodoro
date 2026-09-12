@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeDayLayout,
   computeVisibleHourRange,
+  buildBlocksByDay,
   exceedsBlockDragThreshold,
   resolveSnappedSlot,
   resolveSnappedStart,
@@ -66,6 +67,30 @@ function makeBlock(over: Partial<TimeBlockWithMeta>): TimeBlockWithMeta {
 }
 
 describe("computeDayLayout — uniform hour grid", () => {
+  it("splits an overnight block at local midnight while preserving one database block", () => {
+    const block = makeBlock({ id: 42, start_time: "2026-07-05 22:00:00", end_time: "2026-07-06 06:30:00" });
+    const byDay = buildBlocksByDay([block]);
+    const first = byDay.get("2026-07-05")!;
+    const second = byDay.get("2026-07-06")!;
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0].block).toBe(block);
+    expect(second[0].block).toBe(block);
+    expect(first[0].visibleStart.getHours()).toBe(22);
+    expect(first[0].visibleEnd.getHours()).toBe(0);
+    expect(first[0].visibleEnd.getDate()).toBe(6);
+    expect(second[0].visibleStart.getHours()).toBe(0);
+    expect(second[0].visibleEnd.getHours()).toBe(6);
+    expect(second[0].visibleEnd.getMinutes()).toBe(30);
+
+    const firstLayout = computeDayLayout([], first, 0, 23);
+    const secondLayout = computeDayLayout([], second, 0, 23);
+    expect(firstLayout.positionedBlocks[0].topPx).toBe(22 * BASE_HOUR_HEIGHT);
+    expect(firstLayout.positionedBlocks[0].heightPx).toBe(2 * BASE_HOUR_HEIGHT);
+    expect(secondLayout.positionedBlocks[0].topPx).toBe(0);
+    expect(secondLayout.positionedBlocks[0].heightPx).toBe(6.5 * BASE_HOUR_HEIGHT);
+  });
   it("keeps clicks and drag gestures separate at the six-pixel threshold", () => {
     expect(exceedsBlockDragThreshold(100, 100, 104, 103)).toBe(false);
     expect(exceedsBlockDragThreshold(100, 100, 106, 100)).toBe(true);

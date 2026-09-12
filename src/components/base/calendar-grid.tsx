@@ -164,14 +164,32 @@ function buildSessionsByDay(
   return map;
 }
 
-function buildBlocksByDay(
+export interface CalendarDayBlockSegment {
+  block: TimeBlockWithMeta;
+  visibleStart: Date;
+  visibleEnd: Date;
+  segmentKey: string;
+}
+
+/** Split a persisted block at every local midnight for display only. */
+export function buildBlocksByDay(
   blocks: TimeBlockWithMeta[],
-): Map<string, TimeBlockWithMeta[]> {
-  const map = new Map<string, TimeBlockWithMeta[]>();
+): Map<string, CalendarDayBlockSegment[]> {
+  const map = new Map<string, CalendarDayBlockSegment[]>();
   for (const b of blocks) {
-    const key = toDateString(parseDbDateTime(b.start_time));
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(b);
+    const originalStart = parseDbDateTime(b.start_time);
+    const originalEnd = parseDbDateTime(b.end_time);
+    if (!Number.isFinite(originalStart.getTime()) || originalEnd <= originalStart) continue;
+    let visibleStart = new Date(originalStart);
+    while (visibleStart < originalEnd) {
+      const nextMidnight = new Date(visibleStart);
+      nextMidnight.setHours(24, 0, 0, 0);
+      const visibleEnd = new Date(Math.min(originalEnd.getTime(), nextMidnight.getTime()));
+      const key = toDateString(visibleStart);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push({ block: b, visibleStart: new Date(visibleStart), visibleEnd, segmentKey: `${b.id}-${key}` });
+      visibleStart = nextMidnight;
+    }
   }
   return map;
 }
@@ -184,6 +202,9 @@ interface PositionedSession {
 
 interface PositionedBlock {
   block: TimeBlockWithMeta;
+  segmentKey: string;
+  visibleStart: Date;
+  visibleEnd: Date;
   topPx: number;
   heightPx: number;
   columnIndex: number;
@@ -293,8 +314,15 @@ export function computeVisibleHourRange(
     startHour = Math.min(startHour, hourOf(parseDbDateTime(s.started_at), false));
   }
   for (const b of timeBlocks) {
-    startHour = Math.min(startHour, hourOf(parseDbDateTime(b.start_time), false));
-    endHour = Math.max(endHour, hourOf(parseDbDateTime(b.end_time), true));
+    const start = parseDbDateTime(b.start_time);
+    const end = parseDbDateTime(b.end_time);
+    if (toDateString(start) !== toDateString(end)) {
+      startHour = 0;
+      endHour = 23;
+    } else {
+      startHour = Math.min(startHour, hourOf(start, false));
+      endHour = Math.max(endHour, hourOf(end, true));
+    }
   }
   for (const s of sessions) {
     // Sessions carry a duration rather than an explicit end; derive the end hour.
@@ -312,7 +340,7 @@ export function computeVisibleHourRange(
 
 export function computeDayLayout(
   daySessions: WeekSession[],
-  dayBlocks: TimeBlockWithMeta[],
+  dayBlocks: Array<TimeBlockWithMeta | CalendarDayBlockSegment>,
   startHour: number,
   endHour: number,
 ): DayLayout {
@@ -339,18 +367,18 @@ export function computeDayLayout(
 
   // Planned blocks use the same vertical scale. Even overlapping cards retain
   // the exact top and height implied by their stored start and end times.
-  const blocksWithRange: BlockWithRange[] = dayBlocks.map((block, index) => ({
-    block,
+  const blocksWithRange: BlockWithRange[] = dayBlocks.map((item, index) => ({
+    block: "block" in item ? item.block : item,
     index,
-    startMs: parseDbDateTime(block.start_time).getTime(),
-    endMs: parseDbDateTime(block.end_time).getTime(),
+    startMs: "block" in item ? item.visibleStart.getTime() : parseDbDateTime(item.start_time).getTime(),
+    endMs: "block" in item ? item.visibleEnd.getTime() : parseDbDateTime(item.end_time).getTime(),
   }));
   const blockColumns = assignBlockColumns(blocksWithRange);
   const positionedBlocks: PositionedBlock[] = [...blocksWithRange]
     .sort((a, b) => a.startMs - b.startMs)
-    .map(({ block, index }) => {
-      const startTime = parseDbDateTime(block.start_time);
-      const endTime = parseDbDateTime(block.end_time);
+    .map(({ block, index, startMs, endMs }) => {
+      const startTime = new Date(startMs);
+      const endTime = new Date(endMs);
       const durationMin = Math.max(
         1,
         Math.round((endTime.getTime() - startTime.getTime()) / 60000),
@@ -360,7 +388,7 @@ export function computeDayLayout(
       const topPx = Math.max((startMin / 60) * BASE_HOUR_HEIGHT, 0);
       const heightPx = Math.max((durationMin / 60) * BASE_HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
       const { columnIndex, columnCount, stackIndex } = blockColumns.get(index)!;
-      return { block, topPx, heightPx, columnIndex, columnCount, stackIndex };
+      return { block, segmentKey: `${block.id}-${toDateString(startTime)}`, visibleStart: startTime, visibleEnd: endTime, topPx, heightPx, columnIndex, columnCount, stackIndex };
     });
 
   // Uniform hour rows: hour h starts at h * BASE_HOUR_HEIGHT, never expanded
@@ -473,12 +501,14 @@ function CalendarMobileView({
               <CalendarSessionBlock key={session.id} session={session} topPx={topPx} heightPx={heightPx} />
             ))}
 
-            {layout.positionedBlocks.map(({ block, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
+            {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
               <CalendarTimeBlock
-                key={`b-${block.id}`}
+                key={`b-${segmentKey}`}
                 block={block}
                 topPx={topPx}
                 heightPx={heightPx}
+                displayStart={visibleStart}
+                displayEnd={visibleEnd}
                 columnIndex={columnIndex}
                 columnCount={columnCount}
                 stackIndex={stackIndex}
@@ -620,10 +650,11 @@ function CalendarDesktopView({
   const [resizePreview, setResizePreview] = useState<BlockResizePreview | null>(null);
   const [marquee, setMarquee] = useState<MarqueeVisual | null>(null);
 
-  const visibleBlocks = useMemo(
-    () => allDayLayouts.flatMap((layout) => layout.positionedBlocks.map(({ block }) => block)),
-    [allDayLayouts],
-  );
+  const visibleBlocks = useMemo(() => {
+    const unique = new Map<number, TimeBlockWithMeta>();
+    for (const { block } of allDayLayouts.flatMap((layout) => layout.positionedBlocks)) unique.set(block.id, block);
+    return [...unique.values()];
+  }, [allDayLayouts]);
 
   /** Resolve a captured pointer anywhere over the weekly body to one target slot. */
   const resolveDragPreview = (
@@ -1095,12 +1126,14 @@ function CalendarDesktopView({
                 {layout.positioned.map(({ session, topPx, heightPx }) => (
                   <CalendarSessionBlock key={session.id} session={session} topPx={topPx} heightPx={heightPx} />
                 ))}
-                {layout.positionedBlocks.map(({ block, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
+                {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
                   <CalendarTimeBlock
-                    key={`b-${block.id}`}
+                    key={`b-${segmentKey}`}
                     block={block}
                     topPx={topPx}
                     heightPx={heightPx}
+                    displayStart={visibleStart}
+                    displayEnd={visibleEnd}
                     columnIndex={columnIndex}
                     columnCount={columnCount}
                     stackIndex={stackIndex}
