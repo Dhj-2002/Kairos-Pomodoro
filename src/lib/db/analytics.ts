@@ -28,11 +28,20 @@ export async function getCategoryBreakdown(
         NULL AS intention,
         c.name AS category_name,
         c.color AS category_color,
-        COALESCE(SUM(s.duration_sec), 0) AS total_seconds,
+        COALESCE(SUM(
+          MAX(0,
+            strftime('%s', MIN(
+              COALESCE(s.ended_at, datetime(s.started_at, '+' || s.duration_sec || ' seconds')),
+              datetime($2, '+1 day')
+            )) -
+            strftime('%s', MAX(s.started_at, datetime($1)))
+          )
+        ), 0) AS total_seconds,
         COUNT(*) AS session_count
       FROM sessions s
       LEFT JOIN categories c ON s.category_id = c.id
-      WHERE date(s.started_at) >= $1 AND date(s.started_at) <= $2
+      WHERE s.started_at < datetime($2, '+1 day')
+        AND COALESCE(s.ended_at, datetime(s.started_at, '+' || s.duration_sec || ' seconds')) > datetime($1)
         AND s.completed = 1 AND s.phase = 'work'
       GROUP BY s.category_id, c.name, c.color
       ORDER BY CASE WHEN s.category_id IS NULL THEN 1 ELSE 0 END, total_seconds DESC`,
@@ -45,11 +54,24 @@ export async function getCategoryBreakdown(
       NULL AS intention,
       c.name AS category_name,
       c.color AS category_color,
-      COALESCE(SUM(s.duration_sec), 0) AS total_seconds,
+      COALESCE(SUM(
+        MAX(0,
+          strftime('%s', MIN(
+            COALESCE(s.ended_at, datetime(s.started_at, '+' || s.duration_sec || ' seconds')),
+            datetime('now', 'localtime', 'start of day', '+1 day')
+          )) -
+          strftime('%s', MAX(
+            s.started_at,
+            datetime('now', 'localtime', 'start of day')
+          ))
+        )
+      ), 0) AS total_seconds,
       COUNT(*) AS session_count
     FROM sessions s
     LEFT JOIN categories c ON s.category_id = c.id
-    WHERE date(s.started_at) = date('now', 'localtime')
+    WHERE s.started_at < datetime('now', 'localtime', 'start of day', '+1 day')
+      AND COALESCE(s.ended_at, datetime(s.started_at, '+' || s.duration_sec || ' seconds'))
+        > datetime('now', 'localtime', 'start of day')
       AND s.completed = 1 AND s.phase = 'work'
     GROUP BY s.category_id, c.name, c.color
     ORDER BY CASE WHEN s.category_id IS NULL THEN 1 ELSE 0 END, total_seconds DESC
