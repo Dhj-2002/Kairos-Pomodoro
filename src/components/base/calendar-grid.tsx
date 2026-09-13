@@ -205,6 +205,8 @@ interface PositionedBlock {
   segmentKey: string;
   visibleStart: Date;
   visibleEnd: Date;
+  continuesBefore: boolean;
+  continuesAfter: boolean;
   topPx: number;
   heightPx: number;
   columnIndex: number;
@@ -388,7 +390,21 @@ export function computeDayLayout(
       const topPx = Math.max((startMin / 60) * BASE_HOUR_HEIGHT, 0);
       const heightPx = Math.max((durationMin / 60) * BASE_HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
       const { columnIndex, columnCount, stackIndex } = blockColumns.get(index)!;
-      return { block, segmentKey: `${block.id}-${toDateString(startTime)}`, visibleStart: startTime, visibleEnd: endTime, topPx, heightPx, columnIndex, columnCount, stackIndex };
+      const storedStart = parseDbDateTime(block.start_time);
+      const storedEnd = parseDbDateTime(block.end_time);
+      return {
+        block,
+        segmentKey: `${block.id}-${toDateString(startTime)}`,
+        visibleStart: startTime,
+        visibleEnd: endTime,
+        continuesBefore: startTime.getTime() > storedStart.getTime(),
+        continuesAfter: endTime.getTime() < storedEnd.getTime(),
+        topPx,
+        heightPx,
+        columnIndex,
+        columnCount,
+        stackIndex,
+      };
     });
 
   // Uniform hour rows: hour h starts at h * BASE_HOUR_HEIGHT, never expanded
@@ -501,7 +517,7 @@ function CalendarMobileView({
               <CalendarSessionBlock key={session.id} session={session} topPx={topPx} heightPx={heightPx} />
             ))}
 
-            {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
+            {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, continuesBefore, continuesAfter, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
               <CalendarTimeBlock
                 key={`b-${segmentKey}`}
                 block={block}
@@ -509,6 +525,8 @@ function CalendarMobileView({
                 heightPx={heightPx}
                 displayStart={visibleStart}
                 displayEnd={visibleEnd}
+                continuesBefore={continuesBefore}
+                continuesAfter={continuesAfter}
                 columnIndex={columnIndex}
                 columnCount={columnCount}
                 stackIndex={stackIndex}
@@ -593,6 +611,7 @@ interface BlockDragState {
 interface BlockResizeGesture {
   block: TimeBlockWithMeta;
   edge: CalendarResizeEdge;
+  segmentDay: Date;
   pointerId: number;
   originY: number;
   active: boolean;
@@ -604,8 +623,42 @@ interface BlockResizePreview {
   edge: CalendarResizeEdge;
   newStart: Date;
   newEnd: Date;
+  visibleStart: Date;
+  visibleEnd: Date;
   topPx: number;
   heightPx: number;
+}
+
+/** Resize a real block edge while drawing only the fragment visible on this day. */
+export function computeSegmentResizePreview(
+  block: TimeBlockWithMeta,
+  edge: CalendarResizeEdge,
+  proposedBoundary: Date,
+  segmentDay: Date,
+  startHour: number,
+): Omit<BlockResizePreview, "dayIndex"> {
+  const storedStart = parseDbDateTime(block.start_time);
+  const storedEnd = parseDbDateTime(block.end_time);
+  const newStart = edge === "start" ? snapCalendarResizeStart(storedEnd, proposedBoundary) : storedStart;
+  const newEnd = edge === "end" ? snapCalendarResizeEnd(storedStart, proposedBoundary) : storedEnd;
+  const dayStart = new Date(segmentDay);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const visibleStart = new Date(Math.max(newStart.getTime(), dayStart.getTime()));
+  const visibleEnd = new Date(Math.min(newEnd.getTime(), dayEnd.getTime()));
+  const startMinutes = (visibleStart.getHours() - startHour) * 60 + visibleStart.getMinutes();
+  const durationMinutes = Math.max(1, (visibleEnd.getTime() - visibleStart.getTime()) / 60_000);
+  return {
+    block,
+    edge,
+    newStart,
+    newEnd,
+    visibleStart,
+    visibleEnd,
+    topPx: (startMinutes / 60) * BASE_HOUR_HEIGHT,
+    heightPx: Math.max((durationMinutes / 60) * BASE_HOUR_HEIGHT, MIN_BLOCK_HEIGHT),
+  };
 }
 
 interface MarqueeGesture {
@@ -838,11 +891,12 @@ function CalendarDesktopView({
     edge: CalendarResizeEdge,
     clientY: number,
   ): BlockResizePreview | null => {
-    // resize preview step 1: Keep resizing in the block's visible day column.
+    // resize preview step 1: Keep resizing in the fragment's visible day column.
     const body = calendarBodyRef.current;
     if (!body || hours.length === 0) return null;
-    const start = parseDbDateTime(block.start_time);
-    const dayIndex = weekDays.findIndex((day) => toDateString(day) === toDateString(start));
+    const gesture = resizeGestureRef.current;
+    if (!gesture) return null;
+    const dayIndex = weekDays.findIndex((day) => toDateString(day) === toDateString(gesture.segmentDay));
     if (dayIndex < 0) return null;
 
     // resize preview step 2: Convert vertical pixels to the nearest quarter-hour.
@@ -853,33 +907,21 @@ function CalendarDesktopView({
     const proposedBoundary = new Date(weekDays[dayIndex]);
     proposedBoundary.setHours(hours[0], 0, 0, 0);
     proposedBoundary.setMinutes(proposedBoundary.getMinutes() + rawOffsetMinutes);
-    const storedEnd = parseDbDateTime(block.end_time);
-    const newStart = edge === "start" ? snapCalendarResizeStart(storedEnd, proposedBoundary) : start;
-    const newEnd = edge === "end" ? snapCalendarResizeEnd(start, proposedBoundary) : storedEnd;
-
-    // resize preview step 3: Preserve the stored start and preview only height.
-    const startMinutes = (newStart.getHours() - hours[0]) * 60 + newStart.getMinutes();
-    const durationMinutes = (newEnd.getTime() - newStart.getTime()) / 60_000;
-    return {
-      block,
-      dayIndex,
-      edge,
-      newStart,
-      newEnd,
-      topPx: (startMinutes / 60) * BASE_HOUR_HEIGHT,
-      heightPx: Math.max((durationMinutes / 60) * BASE_HOUR_HEIGHT, MIN_BLOCK_HEIGHT),
-    };
+    // resize preview step 3: Persist the real edge, but clip preview geometry to this day.
+    return { dayIndex, ...computeSegmentResizePreview(block, edge, proposedBoundary, gesture.segmentDay, hours[0]) };
   };
 
   const handleBlockResizeStart = (
     block: TimeBlockWithMeta,
     edge: CalendarResizeEdge,
     event: ReactPointerEvent<HTMLButtonElement>,
+    segmentDay?: Date,
   ) => {
     // resize gesture step 1: Record the edge gesture without entering move mode.
     resizeGestureRef.current = {
       block,
       edge,
+      segmentDay: segmentDay ? new Date(segmentDay) : parseDbDateTime(block.start_time),
       pointerId: event.pointerId,
       originY: event.clientY,
       active: false,
@@ -1126,7 +1168,7 @@ function CalendarDesktopView({
                 {layout.positioned.map(({ session, topPx, heightPx }) => (
                   <CalendarSessionBlock key={session.id} session={session} topPx={topPx} heightPx={heightPx} />
                 ))}
-                {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
+                {layout.positionedBlocks.map(({ block, segmentKey, visibleStart, visibleEnd, continuesBefore, continuesAfter, topPx, heightPx, columnIndex, columnCount, stackIndex }) => (
                   <CalendarTimeBlock
                     key={`b-${segmentKey}`}
                     block={block}
@@ -1134,6 +1176,8 @@ function CalendarDesktopView({
                     heightPx={heightPx}
                     displayStart={visibleStart}
                     displayEnd={visibleEnd}
+                    continuesBefore={continuesBefore}
+                    continuesAfter={continuesAfter}
                     columnIndex={columnIndex}
                     columnCount={columnCount}
                     stackIndex={stackIndex}
@@ -1185,7 +1229,7 @@ function CalendarDesktopView({
                       {resizePreview.block.title || resizePreview.block.task_name || resizePreview.block.category_name || "Focus block"}
                     </p>
                     <p className="mt-0.5 text-[9px] tabular-nums text-sahara-text-muted">
-                      {String(resizePreview.newStart.getHours()).padStart(2, "0")}:{String(resizePreview.newStart.getMinutes()).padStart(2, "0")} – {String(resizePreview.newEnd.getHours()).padStart(2, "0")}:{String(resizePreview.newEnd.getMinutes()).padStart(2, "0")}
+                      {String(resizePreview.visibleStart.getHours()).padStart(2, "0")}:{String(resizePreview.visibleStart.getMinutes()).padStart(2, "0")} – {String(resizePreview.visibleEnd.getHours()).padStart(2, "0")}:{String(resizePreview.visibleEnd.getMinutes()).padStart(2, "0")}
                     </p>
                   </div>
                 )}

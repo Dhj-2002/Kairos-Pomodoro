@@ -3,6 +3,7 @@ import {
   computeDayLayout,
   computeVisibleHourRange,
   buildBlocksByDay,
+  computeSegmentResizePreview,
   exceedsBlockDragThreshold,
   resolveSnappedSlot,
   resolveSnappedStart,
@@ -90,6 +91,28 @@ describe("computeDayLayout — uniform hour grid", () => {
     expect(firstLayout.positionedBlocks[0].heightPx).toBe(2 * BASE_HOUR_HEIGHT);
     expect(secondLayout.positionedBlocks[0].topPx).toBe(0);
     expect(secondLayout.positionedBlocks[0].heightPx).toBe(6.5 * BASE_HOUR_HEIGHT);
+    expect(firstLayout.positionedBlocks[0].continuesAfter).toBe(true);
+    expect(firstLayout.positionedBlocks[0].continuesBefore).toBe(false);
+    expect(secondLayout.positionedBlocks[0].continuesBefore).toBe(true);
+    expect(secondLayout.positionedBlocks[0].continuesAfter).toBe(false);
+  });
+
+  it("resizes the end from the second-day fragment instead of collapsing to yesterday's minimum", () => {
+    const block = makeBlock({ id: 42, start_time: "2026-07-05 22:00:00", end_time: "2026-07-06 06:30:00" });
+    const preview = computeSegmentResizePreview(
+      block,
+      "end",
+      new Date(2026, 6, 6, 7, 15),
+      new Date(2026, 6, 6, 0, 0),
+      0,
+    );
+
+    expect(preview.newStart).toEqual(new Date(2026, 6, 5, 22, 0));
+    expect(preview.newEnd).toEqual(new Date(2026, 6, 6, 7, 15));
+    expect(preview.visibleStart).toEqual(new Date(2026, 6, 6, 0, 0));
+    expect(preview.visibleEnd).toEqual(new Date(2026, 6, 6, 7, 15));
+    expect(preview.topPx).toBe(0);
+    expect(preview.heightPx).toBe(7.25 * BASE_HOUR_HEIGHT);
   });
   it("keeps clicks and drag gestures separate at the six-pixel threshold", () => {
     expect(exceedsBlockDragThreshold(100, 100, 104, 103)).toBe(false);

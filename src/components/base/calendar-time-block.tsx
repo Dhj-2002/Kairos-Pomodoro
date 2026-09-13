@@ -16,6 +16,8 @@ interface CalendarTimeBlockProps {
   heightPx: number;
   displayStart?: Date;
   displayEnd?: Date;
+  continuesBefore?: boolean;
+  continuesAfter?: boolean;
   columnIndex?: number;
   columnCount?: number;
   stackIndex?: number;
@@ -26,7 +28,7 @@ interface CalendarTimeBlockProps {
   onDragStart?: (block: TimeBlockWithMeta, event: ReactPointerEvent<HTMLDivElement>) => void;
   onDragMove?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onDragEnd?: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onResizeStart?: (block: TimeBlockWithMeta, edge: CalendarResizeEdge, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onResizeStart?: (block: TimeBlockWithMeta, edge: CalendarResizeEdge, event: ReactPointerEvent<HTMLButtonElement>, segmentDay?: Date) => void;
   onResizeMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onResizeEnd?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   isDragging?: boolean;
@@ -63,6 +65,8 @@ export function CalendarTimeBlock({
   heightPx,
   displayStart,
   displayEnd,
+  continuesBefore = false,
+  continuesAfter = false,
   columnIndex = 0,
   columnCount = 1,
   stackIndex = 0,
@@ -106,7 +110,7 @@ export function CalendarTimeBlock({
         event.preventDefault();
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
-        onResizeStart(block, edge, event);
+        onResizeStart(block, edge, event, displayStart);
       }}
       onPointerMove={(event) => {
         event.stopPropagation();
@@ -189,6 +193,8 @@ export function CalendarTimeBlock({
       <div
         className={cn(
           "w-full rounded-lg border-2 px-2 flex flex-col justify-center overflow-hidden transition-all hover:shadow-md",
+          continuesBefore && "rounded-t-none border-t-0",
+          continuesAfter && "rounded-b-none border-b-0",
           isQuarterHour ? "py-0" : "py-1",
           isSelected
             ? "shadow-lg"
@@ -278,8 +284,8 @@ export function CalendarTimeBlock({
         </div>
       </div>
 
-      {resizeHandle("start")}
-      {resizeHandle("end")}
+      {!continuesBefore && resizeHandle("start")}
+      {!continuesAfter && resizeHandle("end")}
     </div>
   );
 }
