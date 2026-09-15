@@ -190,51 +190,45 @@ $sha = (& git rev-parse HEAD).Trim()
 $actionsUrl = 'https://github.com/Dhj-2002/Kairos-Pomodoro/actions/workflows/release.yml'
 Write-Output "Source and tag pushed for $tag at $sha"
 
-# 7. A push is not a completed release. Wait for the tagged workflow, including
-# its final cross-platform manifest merge, and fail on cancellation or errors.
+# 7. A push is not a completed release. Poll the exact public endpoint used by
+# installed apps; this avoids anonymous Actions API rate limits and proves the
+# final cross-platform merge has actually replaced all matrix partials.
 $deadline = (Get-Date).AddMinutes($ReleaseTimeoutMinutes)
-$run = $null
-$lastState = $null
+$manifest = $null
+$lastObservedVersion = $null
+$latestUrl = 'https://github.com/Dhj-2002/Kairos-Pomodoro/releases/latest/download/latest.json'
+$requiredPlatforms = @('darwin-x86_64', 'darwin-aarch64', 'windows-x86_64', 'linux-x86_64')
 while ((Get-Date) -lt $deadline) {
-  $runs = Invoke-GitHubJson 'https://api.github.com/repos/Dhj-2002/Kairos-Pomodoro/actions/runs?event=push&per_page=20'
-  $run = @($runs.workflow_runs | Where-Object { $_.head_branch -eq $tag -and $_.head_sha -eq $sha })[0]
-  if ($run) {
-    $state = "$($run.status)/$($run.conclusion)"
-    if ($state -ne $lastState) {
-      Write-Output "GitHub Actions: $state $($run.html_url)"
-      $lastState = $state
+  $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  try {
+    $candidate = Invoke-GitHubJson "$latestUrl`?release_check=$cacheBust"
+    if ($candidate.version -ne $lastObservedVersion) {
+      Write-Output "Latest updater currently reports version $($candidate.version)"
+      $lastObservedVersion = $candidate.version
     }
-    if ($run.status -eq 'completed') { break }
+    if ($candidate.version -eq $Version) {
+      $complete = $true
+      foreach ($platform in $requiredPlatforms) {
+        $property = $candidate.platforms.PSObject.Properties[$platform]
+        if (-not $property -or -not $property.Value.url -or -not $property.Value.signature) {
+          $complete = $false
+          break
+        }
+      }
+      if ($complete -and $candidate.platforms.'darwin-x86_64'.url -match 'Kairos-Pomodoro_x64\.app\.tar\.gz$') {
+        $manifest = $candidate
+        break
+      }
+    }
+  } catch {
+    Write-Warning "Updater manifest not ready: $($_.Exception.Message)"
   }
   Start-Sleep -Seconds 30
 }
-if (-not $run -or $run.status -ne 'completed') {
-  throw "Release workflow did not finish within $ReleaseTimeoutMinutes minutes. Check $actionsUrl"
-}
-if ($run.conclusion -ne 'success') {
-  throw "Release workflow finished with $($run.conclusion): $($run.html_url)"
-}
-
-# 8. Verify the endpoint used by the installed app, not merely the tag page.
-# This catches matrix jobs overwriting latest.json with a one-platform file.
-$cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$manifest = Invoke-GitHubJson "https://github.com/Dhj-2002/Kairos-Pomodoro/releases/latest/download/latest.json?release_check=$cacheBust"
-if ($manifest.version -ne $Version) {
-  throw "Latest updater version is $($manifest.version), expected $Version"
-}
-$requiredPlatforms = @('darwin-x86_64', 'darwin-aarch64', 'windows-x86_64', 'linux-x86_64')
-foreach ($platform in $requiredPlatforms) {
-  $property = $manifest.platforms.PSObject.Properties[$platform]
-  if (-not $property) { throw "Published latest.json is missing $platform" }
-  $entry = $property.Value
-  if (-not $entry.url -or -not $entry.signature) {
-    throw "Published latest.json is incomplete for $platform"
-  }
-}
-if ($manifest.platforms.'darwin-x86_64'.url -notmatch 'Kairos-Pomodoro_x64\.app\.tar\.gz$') {
-  throw "Intel Mac updater URL is unexpected: $($manifest.platforms.'darwin-x86_64'.url)"
+if (-not $manifest) {
+  throw "A complete v$Version updater manifest was not published within $ReleaseTimeoutMinutes minutes. Check $actionsUrl"
 }
 
 Write-Output "Published and verified $tag at $sha"
-Write-Output "Actions: $($run.html_url)"
+Write-Output "Actions: $actionsUrl"
 Write-Output "Intel updater: $($manifest.platforms.'darwin-x86_64'.url)"
