@@ -7,7 +7,7 @@ import type { TimeBlockWithMeta } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { MIN_BLOCK_HEIGHT } from "./calendar-grid";
 import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
-import { formatTime24Hour } from "@/lib/time";
+import { formatTime24Hour, parseDbDateTime } from "@/lib/time";
 import type { CalendarResizeEdge } from "@/features/schedule/calendar-resize";
 
 interface CalendarTimeBlockProps {
@@ -58,7 +58,15 @@ export function getCalendarBlockVisualInset(heightPx: number): number {
   return 1;
 }
 
-/** Planned block with exact outer time geometry and an inset visual card. */
+/** Return whether the complete stored block has passed at the supplied clock time. */
+export function isCalendarBlockElapsed(endTime: string, nowMs = Date.now()): boolean {
+  // elapsed-state step 1: A running block remains pending until its stored end
+  // boundary, then changes to the hollow historical treatment.
+  return parseDbDateTime(endTime).getTime() <= nowMs;
+}
+
+/** Planned block with exact time geometry, a softly filled pending state, and
+ * a hollow elapsed state that updates on the calendar's minute tick. */
 export function CalendarTimeBlock({
   block,
   topPx,
@@ -84,15 +92,14 @@ export function CalendarTimeBlock({
   isResizing = false,
   isSelected = false,
 }: CalendarTimeBlockProps) {
+  // calendar state step 1: Judge the whole stored block, not an overnight
+  // visual segment, so every segment changes state together after completion.
   const color = resolveScheduleBlockColor(block);
   const label = block.title || block.task_name || block.category_name || "Focus block";
   const isShort = heightPx < 56;
   const isQuarterHour = heightPx <= MIN_BLOCK_HEIGHT;
   const visualInsetY = getCalendarBlockVisualInset(heightPx);
-  // A block linked to a session has already been logged as focus time, so it
-  // counts toward stats — render it solid (like a completed session) instead
-  // of dashed, and drop the "start focus" action.
-  const isLogged = block.session_id != null;
+  const isElapsed = isCalendarBlockElapsed(block.end_time);
 
   const resizeHandle = (edge: CalendarResizeEdge) => onResizeStart && (
     <button
@@ -198,9 +205,7 @@ export function CalendarTimeBlock({
           isQuarterHour ? "py-0" : "py-1",
           isSelected
             ? "shadow-lg"
-            : isLogged
-            ? "bg-sahara-bg/80 backdrop-blur-sm"
-            : "bg-sahara-bg/60 backdrop-blur-sm",
+            : "backdrop-blur-sm",
         )}
         style={{
           // calendar block step 3: Insets create separation without changing
@@ -210,7 +215,9 @@ export function CalendarTimeBlock({
           borderColor: color,
           background: isSelected
             ? `color-mix(in srgb, ${color} 68%, #111827 32%)`
-            : undefined,
+            : isElapsed
+              ? "transparent"
+              : `color-mix(in srgb, ${color} 13%, transparent)`,
         }}
       >
         <div className="flex h-full w-full min-h-0 items-center gap-1.5">
