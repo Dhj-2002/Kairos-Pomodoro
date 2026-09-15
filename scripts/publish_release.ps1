@@ -101,6 +101,71 @@ function Invoke-GitHubJson {
   }
 }
 
+function Install-WindowsReleaseAndRepairShortcuts {
+  param(
+    [Parameter(Mandatory)][string]$InstallerUrl,
+    [Parameter(Mandatory)][string]$ExpectedVersion
+  )
+
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return }
+
+  $installerPath = Join-Path ([IO.Path]::GetTempPath()) "Kairos-Pomodoro-$ExpectedVersion-setup.exe"
+  try {
+    try {
+      Invoke-WebRequest -Uri $InstallerUrl -OutFile $installerPath -TimeoutSec 120
+    } catch {
+      Write-Warning "Direct installer download failed; retrying through $ProxyUrl"
+      Invoke-WebRequest -Proxy $ProxyUrl -Uri $InstallerUrl -OutFile $installerPath -TimeoutSec 120
+    }
+
+    # The release being installed may still be running from an older shortcut.
+    # Stop every installed Kairos process before NSIS replaces the executable.
+    Get-Process -Name 'Kairos-Pomodoro' -ErrorAction SilentlyContinue | Stop-Process -Force
+    $installer = Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait -PassThru
+    if ($installer.ExitCode -ne 0) {
+      throw "Kairos installer exited with code $($installer.ExitCode)"
+    }
+
+    $stableExecutable = Join-Path $env:LOCALAPPDATA 'Kairos-Pomodoro\Kairos-Pomodoro.exe'
+    if (-not (Test-Path -LiteralPath $stableExecutable)) {
+      throw "Installed Kairos executable is missing: $stableExecutable"
+    }
+    $installedVersion = (Get-Item -LiteralPath $stableExecutable).VersionInfo.ProductVersion
+    if ($installedVersion -ne $ExpectedVersion) {
+      throw "Installed Kairos version is $installedVersion, expected $ExpectedVersion"
+    }
+
+    $shortcutRoots = @(
+      [Environment]::GetFolderPath('Desktop'),
+      [Environment]::GetFolderPath('StartMenu'),
+      (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
+    )
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcuts = @()
+    foreach ($root in $shortcutRoots) {
+      if (Test-Path -LiteralPath $root) {
+        $shortcuts += Get-ChildItem -LiteralPath $root -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -match 'Kairos' }
+      }
+    }
+    if ($shortcuts.Count -eq 0) {
+      $programs = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'
+      $shortcuts = @([IO.FileInfo](Join-Path $programs 'Kairos-Pomodoro.lnk'))
+    }
+    foreach ($shortcutFile in $shortcuts) {
+      $shortcut = $shell.CreateShortcut($shortcutFile.FullName)
+      $shortcut.TargetPath = $stableExecutable
+      $shortcut.WorkingDirectory = Split-Path -Parent $stableExecutable
+      $shortcut.IconLocation = "$stableExecutable,0"
+      $shortcut.Save()
+    }
+    Start-Process -FilePath $stableExecutable
+    Write-Output "Installed Kairos $ExpectedVersion and rebound $($shortcuts.Count) shortcut(s) to $stableExecutable"
+  } finally {
+    Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Assert-NoPrivatePath {
   param([string[]]$Paths)
   foreach ($path in $Paths) {
@@ -232,3 +297,12 @@ if (-not $manifest) {
 Write-Output "Published and verified $tag at $sha"
 Write-Output "Actions: $actionsUrl"
 Write-Output "Intel updater: $($manifest.platforms.'darwin-x86_64'.url)"
+
+# 8. Keep this Windows development machine on the release it just published.
+# The shortcut always targets the stable per-user install path rather than a
+# Codex LocalCache copy or a version-specific build artifact.
+$windowsInstallerUrl = $manifest.platforms.'windows-x86_64-nsis'.url
+if (-not $windowsInstallerUrl) {
+  throw "Published manifest has no Windows NSIS installer URL."
+}
+Install-WindowsReleaseAndRepairShortcuts -InstallerUrl $windowsInstallerUrl -ExpectedVersion $Version

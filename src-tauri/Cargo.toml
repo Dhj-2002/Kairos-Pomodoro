@@ -1,6 +1,6 @@
 [package]
 name = "Kairos-Pomodoro"
-version = "1.6.15"
+version = "1.6.16"
 description = "Kairos Pomodoro - Premium Pomodoro Timer"
 authors = ["you"]
 edition = "2021"
