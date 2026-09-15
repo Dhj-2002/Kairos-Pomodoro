@@ -114,6 +114,24 @@ describe("computeDayLayout — uniform hour grid", () => {
     expect(preview.topPx).toBe(0);
     expect(preview.heightPx).toBe(7.25 * BASE_HOUR_HEIGHT);
   });
+
+  it("resizes a second-day continuation start upward into the previous evening", () => {
+    const block = makeBlock({ id: 42, start_time: "2026-07-06 00:00:00", end_time: "2026-07-06 06:30:00" });
+    const preview = computeSegmentResizePreview(
+      block,
+      "start",
+      new Date(2026, 6, 5, 22, 0),
+      new Date(2026, 6, 5, 0, 0),
+      0,
+    );
+
+    expect(preview.newStart).toEqual(new Date(2026, 6, 5, 22, 0));
+    expect(preview.newEnd).toEqual(new Date(2026, 6, 6, 6, 30));
+    expect(preview.visibleStart).toEqual(new Date(2026, 6, 5, 22, 0));
+    expect(preview.visibleEnd).toEqual(new Date(2026, 6, 6, 0, 0));
+    expect(preview.topPx).toBe(22 * BASE_HOUR_HEIGHT);
+    expect(preview.heightPx).toBe(2 * BASE_HOUR_HEIGHT);
+  });
   it("keeps clicks and drag gestures separate at the six-pixel threshold", () => {
     expect(exceedsBlockDragThreshold(100, 100, 104, 103)).toBe(false);
     expect(exceedsBlockDragThreshold(100, 100, 106, 100)).toBe(true);

@@ -284,7 +284,7 @@ export function CalendarTimeBlock({
         </div>
       </div>
 
-      {!continuesBefore && resizeHandle("start")}
+      {resizeHandle("start")}
       {!continuesAfter && resizeHandle("end")}
     </div>
   );

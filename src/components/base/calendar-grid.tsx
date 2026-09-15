@@ -885,13 +885,14 @@ function CalendarDesktopView({
     setDragPreview(null);
   };
 
-  /** Resolve either resize edge to a same-day snapped boundary. */
+  /** Resolve a resize edge to a snapped boundary, including the adjacent day when the pointer crosses midnight. */
   const resolveResizePreview = (
     block: TimeBlockWithMeta,
     edge: CalendarResizeEdge,
     clientY: number,
   ): BlockResizePreview | null => {
-    // resize preview step 1: Keep resizing in the fragment's visible day column.
+    // resize preview step 1: Start from the fragment's visible day, while
+    // retaining one adjacent-day height for a captured pointer beyond the grid.
     const body = calendarBodyRef.current;
     if (!body || hours.length === 0) return null;
     const gesture = resizeGestureRef.current;
@@ -900,15 +901,26 @@ function CalendarDesktopView({
     if (dayIndex < 0) return null;
 
     // resize preview step 2: Convert vertical pixels to the nearest quarter-hour.
+    // A continuation fragment can therefore pull its real start edge upward
+    // through 00:00 into the preceding evening.
     const rect = body.getBoundingClientRect();
     const layout = allDayLayouts[dayIndex];
-    const y = Math.max(0, Math.min(clientY - rect.top, layout.totalHeight));
+    const rawY = clientY - rect.top;
+    const minimumY = edge === "start" ? -layout.totalHeight : 0;
+    const maximumY = edge === "end" ? layout.totalHeight * 2 : layout.totalHeight;
+    const y = Math.max(minimumY, Math.min(rawY, maximumY));
     const rawOffsetMinutes = (y / BASE_HOUR_HEIGHT) * 60;
     const proposedBoundary = new Date(weekDays[dayIndex]);
     proposedBoundary.setHours(hours[0], 0, 0, 0);
     proposedBoundary.setMinutes(proposedBoundary.getMinutes() + rawOffsetMinutes);
-    // resize preview step 3: Persist the real edge, but clip preview geometry to this day.
-    return { dayIndex, ...computeSegmentResizePreview(block, edge, proposedBoundary, gesture.segmentDay, hours[0]) };
+    // resize preview step 3: Draw the changed edge in the day it actually
+    // reaches, then persist the single real database block on pointer release.
+    const previewDayIndex = weekDays.findIndex((day) => toDateString(day) === toDateString(proposedBoundary));
+    const previewDay = previewDayIndex >= 0 ? weekDays[previewDayIndex] : gesture.segmentDay;
+    return {
+      dayIndex: previewDayIndex >= 0 ? previewDayIndex : dayIndex,
+      ...computeSegmentResizePreview(block, edge, proposedBoundary, previewDay, hours[0]),
+    };
   };
 
   const handleBlockResizeStart = (
