@@ -28,7 +28,13 @@ param(
   [ValidateNotNullOrEmpty()]
   [string[]]$Files,
 
-  [switch]$ValidateOnly
+  [switch]$ValidateOnly,
+
+  [ValidatePattern('^https?://')]
+  [string]$ProxyUrl = 'http://127.0.0.1:7897',
+
+  [ValidateRange(5, 60)]
+  [int]$ReleaseTimeoutMinutes = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +56,43 @@ function Invoke-Git {
   param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
   & git @Arguments
   if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed with exit code $LASTEXITCODE" }
+}
+
+function Invoke-GitPush {
+  param([Parameter(Mandatory)][string]$Ref)
+
+  # push step 1: Prefer the ordinary network path so environments without a
+  # local proxy remain portable.
+  & git push origin $Ref
+  if ($LASTEXITCODE -eq 0) { return }
+
+  # push step 2: A failed push is idempotently retried through the user's known
+  # Clash mixed port. A second failure is terminal and never reported as sent.
+  Write-Warning "Direct push failed for $Ref; retrying through $ProxyUrl"
+  & git -c "http.proxy=$ProxyUrl" -c "https.proxy=$ProxyUrl" push origin $Ref
+  if ($LASTEXITCODE -ne 0) { throw "Push failed through both direct and proxy routes: $Ref" }
+}
+
+function Get-RemoteTagReference {
+  param([Parameter(Mandatory)][string]$Tag)
+
+  $result = @(& git ls-remote --tags origin "refs/tags/$Tag" 2>$null)
+  if ($LASTEXITCODE -eq 0) { return $result }
+  $result = @(& git -c "http.proxy=$ProxyUrl" -c "https.proxy=$ProxyUrl" ls-remote --tags origin "refs/tags/$Tag" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "Cannot verify remote tag through direct or proxy routes: $Tag" }
+  return $result
+}
+
+function Invoke-GitHubJson {
+  param([Parameter(Mandatory)][string]$Uri)
+
+  $headers = @{ Accept = 'application/vnd.github+json' }
+  try {
+    return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 30
+  } catch {
+    Write-Warning "Direct GitHub API request failed; retrying through $ProxyUrl"
+    return Invoke-RestMethod -Proxy $ProxyUrl -Uri $Uri -Headers $headers -TimeoutSec 30
+  }
 }
 
 function Assert-NoPrivatePath {
@@ -127,16 +170,65 @@ if ($staged.Count -eq 0) { throw 'No release changes were staged.' }
 $tag = "v$Version"
 & git rev-parse --verify --quiet "refs/tags/$tag" *> $null
 if ($LASTEXITCODE -eq 0) { throw "Local tag already exists: $tag" }
-& git ls-remote --exit-code --tags origin "refs/tags/$tag" *> $null
-if ($LASTEXITCODE -eq 0) { throw "Remote tag already exists: $tag" }
+$remoteTag = @(Get-RemoteTagReference $tag)
+if ($remoteTag.Count -gt 0) { throw "Remote tag already exists: $tag" }
 
 # 6. Commit first, then push main and the matching tag. The tag is the only
 # trigger for the signed multi-platform GitHub Release workflow.
 Invoke-Git commit -m $CommitMessage
 Invoke-Git tag $tag
-Invoke-Git push origin main
-Invoke-Git push origin $tag
+Invoke-GitPush main
+Invoke-GitPush $tag
 
 $sha = (& git rev-parse HEAD).Trim()
-Write-Output "Published $tag at $sha"
-Write-Output 'Actions: https://github.com/Dhj-2002/Kairos-Pomodoro/actions/workflows/release.yml'
+$actionsUrl = 'https://github.com/Dhj-2002/Kairos-Pomodoro/actions/workflows/release.yml'
+Write-Output "Source and tag pushed for $tag at $sha"
+
+# 7. A push is not a completed release. Wait for the tagged workflow, including
+# its final cross-platform manifest merge, and fail on cancellation or errors.
+$deadline = (Get-Date).AddMinutes($ReleaseTimeoutMinutes)
+$run = $null
+$lastState = $null
+while ((Get-Date) -lt $deadline) {
+  $runs = Invoke-GitHubJson 'https://api.github.com/repos/Dhj-2002/Kairos-Pomodoro/actions/runs?event=push&per_page=20'
+  $run = @($runs.workflow_runs | Where-Object { $_.head_branch -eq $tag -and $_.head_sha -eq $sha })[0]
+  if ($run) {
+    $state = "$($run.status)/$($run.conclusion)"
+    if ($state -ne $lastState) {
+      Write-Output "GitHub Actions: $state $($run.html_url)"
+      $lastState = $state
+    }
+    if ($run.status -eq 'completed') { break }
+  }
+  Start-Sleep -Seconds 30
+}
+if (-not $run -or $run.status -ne 'completed') {
+  throw "Release workflow did not finish within $ReleaseTimeoutMinutes minutes. Check $actionsUrl"
+}
+if ($run.conclusion -ne 'success') {
+  throw "Release workflow finished with $($run.conclusion): $($run.html_url)"
+}
+
+# 8. Verify the endpoint used by the installed app, not merely the tag page.
+# This catches matrix jobs overwriting latest.json with a one-platform file.
+$cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$manifest = Invoke-GitHubJson "https://github.com/Dhj-2002/Kairos-Pomodoro/releases/latest/download/latest.json?release_check=$cacheBust"
+if ($manifest.version -ne $Version) {
+  throw "Latest updater version is $($manifest.version), expected $Version"
+}
+$requiredPlatforms = @('darwin-x86_64', 'darwin-aarch64', 'windows-x86_64', 'linux-x86_64')
+foreach ($platform in $requiredPlatforms) {
+  $property = $manifest.platforms.PSObject.Properties[$platform]
+  if (-not $property) { throw "Published latest.json is missing $platform" }
+  $entry = $property.Value
+  if (-not $entry.url -or -not $entry.signature) {
+    throw "Published latest.json is incomplete for $platform"
+  }
+}
+if ($manifest.platforms.'darwin-x86_64'.url -notmatch 'Kairos-Pomodoro_x64\.app\.tar\.gz$') {
+  throw "Intel Mac updater URL is unexpected: $($manifest.platforms.'darwin-x86_64'.url)"
+}
+
+Write-Output "Published and verified $tag at $sha"
+Write-Output "Actions: $($run.html_url)"
+Write-Output "Intel updater: $($manifest.platforms.'darwin-x86_64'.url)"
