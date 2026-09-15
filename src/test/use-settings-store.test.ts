@@ -128,6 +128,23 @@ describe("useSettingsStore", () => {
       expect(useSettingsStore.getState().settings.theme).toBe("dark");
     });
 
+    it("persists floating-window off across a settings reload", async () => {
+      const { getSetting, setSetting } = await import("@/lib/db");
+      await useSettingsStore.getState().updateSetting("miniWindowSize", "off");
+      expect(setSetting).toHaveBeenCalledWith("miniWindowSize", "off");
+      vi.mocked(getSetting).mockImplementation((key: string) =>
+        Promise.resolve(key === "miniWindowSize" ? "off" : null),
+      );
+      useSettingsStore.setState((state) => ({
+        settings: { ...state.settings, miniWindowSize: "small" },
+        loaded: false,
+      }));
+
+      await useSettingsStore.getState().loadSettings();
+
+      expect(useSettingsStore.getState().settings.miniWindowSize).toBe("off");
+    });
+
     it("persists the selected schedule reminder sound", async () => {
       const { setSetting } = await import("@/lib/db");
       await useSettingsStore

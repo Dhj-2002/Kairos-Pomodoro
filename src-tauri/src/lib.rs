@@ -64,10 +64,9 @@ pub fn run() {
             if let Err(error) = setup_menubar_tray(app) {
                 eprintln!("Kairos tray setup failed: {error}");
             }
-            #[cfg(target_os = "windows")]
-            if let Some(window) = app.get_webview_window("mini") {
-                let _ = window.show();
-            }
+            // The mini webview starts hidden from tauri.conf.json. Do not show
+            // it here: after settings load, useMiniWindowPreference is the
+            // single owner of Small/Medium/Large/Off visibility restoration.
             #[cfg(target_os = "windows")]
             if let Err(error) = commands::window::setup_mini_click_through(app.handle()) {
                 eprintln!("Kairos mini-window click-through setup failed: {error}");
