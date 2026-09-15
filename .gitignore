@@ -50,3 +50,5 @@ trash_rm_scripts/
 *.db-wal
 *.dmg
 *.zip
+kairos-backup-*.json
+Kairos-calendar-sync*.json

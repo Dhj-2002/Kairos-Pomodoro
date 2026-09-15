@@ -22,7 +22,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Verify tag, version, and publishable file set
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          test "${GITHUB_REF_NAME}" = "v${version}" || {
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version v${version}"
+            exit 1
+          }
+          if git ls-files | grep -E '(^|/)(kairos-backup-.*\.json|Kairos-calendar-sync.*\.json|.*\.(db|db-shm|db-wal|dmg|zip|key))$'; then
+            echo "::error::A private or generated artifact is tracked by Git"
+            exit 1
+          fi
+
+      - name: Install project dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck and test
+        run: |
+          bunx --bun tsc --noEmit
+          bun --bun run test
+
   publish-tauri:
+    needs: quality-gate
     strategy:
       fail-fast: false
       matrix:
