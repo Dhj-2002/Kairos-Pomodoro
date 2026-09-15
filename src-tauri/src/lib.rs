@@ -40,7 +40,14 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        // The main window keeps its saved geometry. The mini window is owned
+        // exclusively by miniWindowSize, so restoring its old visibility here
+        // would override a persisted Off choice before React loads settings.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(&["mini"])
+                .build(),
+        )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
