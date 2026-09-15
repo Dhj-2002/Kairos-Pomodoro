@@ -346,6 +346,18 @@ export async function initDb(): Promise<void> {
     );
   }
 
+  // schema invariant 1: Reassert the deletion trigger independently of the
+  // version marker. Older migration handling records a version even after a
+  // warned statement, so startup must self-heal a missing critical trigger.
+  await database.execute(`CREATE TRIGGER IF NOT EXISTS trg_time_blocks_delete_linked_session
+    AFTER UPDATE OF deleted_at ON time_blocks
+    WHEN NEW.deleted_at IS NOT NULL
+     AND OLD.deleted_at IS NULL
+     AND OLD.session_id IS NOT NULL
+    BEGIN
+      DELETE FROM sessions WHERE id = OLD.session_id;
+    END`);
+
   // Seed default presets if none exist
   const presetCount = await database.select<{ count: number }[]>(
     "SELECT COUNT(*) as count FROM presets",
