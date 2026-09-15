@@ -39,6 +39,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+# PowerShell 7 can convert a native command's non-zero exit into a terminating
+# error before the script can inspect $LASTEXITCODE. Push fallback relies on
+# that inspection, so native failures remain explicit return codes here.
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $repoRoot
