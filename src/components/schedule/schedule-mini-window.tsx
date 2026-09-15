@@ -7,6 +7,7 @@ import {
   SCHEDULE_WINDOW_EVENT,
   type ScheduleWindowStatus,
 } from "@/features/schedule/use-schedule-runtime";
+import { getSetting } from "@/lib/db";
 
 const POSITION_KEY = "kairos-mini-position-saved";
 const IDLE: ScheduleWindowStatus = {
@@ -26,7 +27,18 @@ export function formatMiniDateTime(now: Date): string {
   return `${month}/${day} ${hour}:${minute}${period}`;
 }
 
+/** Resolve the only startup visibility gate for the Windows mini window. */
+export function shouldShowMiniWindow(savedSize: string | null): boolean {
+  // visibility gate step 1: Missing legacy settings retain the enabled
+  // default, while the explicit persisted Off value always remains hidden.
+  return savedSize !== "off";
+}
+
+/** Windows schedule surface that may show only after its persisted visibility
+ * preference has been read; Off always wins over startup restoration. */
 export function ScheduleMiniWindow() {
+  // mini startup step 1: Render transparently while the persisted preference
+  // is checked, so this webview can never race the main window and re-show Off.
   const [status, setStatus] = useState(IDLE);
   const [, setClockTick] = useState(0);
 
@@ -43,6 +55,14 @@ export function ScheduleMiniWindow() {
     let cleanupMove: (() => void) | undefined;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
+      const savedSize = await getSetting("miniWindowSize").catch(() => null);
+      if (!shouldShowMiniWindow(savedSize)) {
+        await mini.hide();
+        return;
+      }
+
+      // mini startup step 2: Only an enabled size may restore position and
+      // make the native window visible.
       await mini.setAlwaysOnTop(true);
       if (localStorage.getItem(POSITION_KEY) === "1") {
         await restoreStateCurrent(StateFlags.POSITION).catch(() => {});
