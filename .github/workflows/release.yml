@@ -173,3 +173,68 @@ jobs:
           echo "=== latest.json ==="
           cat latest.json
           node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("latest.json","utf8")).platforms||{}; const expected=process.argv[1]; if (!p[expected]) { console.error(`::error::latest.json is missing ${expected}`); process.exit(1); } console.log(`::notice::latest.json contains ${expected}`);' "${{ matrix.updater-platform }}"
+
+      # Preserve each runner's manifest under a unique artifact name. Matrix
+      # jobs must never be trusted to publish the final latest.json because
+      # tauri-action uploads the same asset name from every platform and the
+      # last writer would erase all previously published platform entries.
+      - name: Upload platform updater manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-manifest-${{ matrix.updater-platform }}
+          path: latest.json
+          if-no-files-found: error
+
+  publish-updater-manifest:
+    name: Merge and publish complete updater manifest
+    needs: publish-tauri
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download every platform manifest
+        uses: actions/download-artifact@v4
+        with:
+          pattern: updater-manifest-*
+          path: platform-manifests
+
+      - name: Merge and verify updater platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const root = 'platform-manifests';
+          const files = [];
+          const visit = (dir) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) visit(full);
+              else if (entry.name === 'latest.json') files.push(full);
+            }
+          };
+          visit(root);
+          if (files.length !== 4) throw new Error(`Expected 4 platform manifests, found ${files.length}`);
+          const manifests = files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
+          const versions = new Set(manifests.map((item) => item.version));
+          if (versions.size !== 1) throw new Error(`Manifest version mismatch: ${[...versions].join(', ')}`);
+          const merged = { ...manifests[0], platforms: {} };
+          for (const manifest of manifests) Object.assign(merged.platforms, manifest.platforms || {});
+          const required = ['darwin-x86_64', 'darwin-aarch64', 'windows-x86_64', 'linux-x86_64'];
+          const missing = required.filter((key) => !merged.platforms[key]);
+          if (missing.length) throw new Error(`Merged latest.json missing: ${missing.join(', ')}`);
+          fs.writeFileSync('latest.json', `${JSON.stringify(merged, null, 2)}\n`);
+          console.log(`Merged ${files.length} manifests with keys: ${Object.keys(merged.platforms).join(', ')}`);
+          NODE
+
+      - name: Replace race-prone manifest with merged manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" latest.json --clobber --repo "${GITHUB_REPOSITORY}"
+
+      - name: Verify published Intel Mac updater entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/latest.json"
+          curl -fsSL "$url" -o published-latest.json
+          node -e 'const p=require("./published-latest.json").platforms||{}; for (const key of ["darwin-x86_64","darwin-aarch64","windows-x86_64","linux-x86_64"]) if (!p[key]) throw new Error(`Published latest.json missing ${key}`); console.log("Published latest.json contains every required updater platform")'
