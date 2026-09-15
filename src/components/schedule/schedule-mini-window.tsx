@@ -48,8 +48,8 @@ export function ScheduleMiniWindow() {
         await restoreStateCurrent(StateFlags.POSITION).catch(() => {});
       } else {
         await mini.setPosition(new LogicalPosition(
-          Math.max(20, screen.availWidth - 440),
-          Math.max(20, screen.availHeight - 84),
+          Math.max(20, screen.availWidth - 360),
+          Math.max(20, screen.availHeight - 48),
         ));
       }
       await mini.show();
@@ -84,25 +84,25 @@ export function ScheduleMiniWindow() {
   };
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-transparent p-1 font-sans select-none">
-      <div className="flex h-full w-full items-center gap-3 rounded-[20px] border border-white/20 bg-neutral-800/80 px-4 text-white shadow-2xl backdrop-blur-xl">
+    <main className="h-screen w-screen overflow-hidden bg-transparent p-0.5 font-sans select-none">
+      <div className="flex h-full w-full items-center gap-2 rounded-[14px] border border-white/20 bg-neutral-800/80 px-2.5 text-white shadow-xl backdrop-blur-xl">
         <span
           onMouseDown={drag}
-          className="flex size-9 shrink-0 cursor-grab items-center justify-center rounded-full active:cursor-grabbing"
+          className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-full active:cursor-grabbing"
           style={{ backgroundColor: status.color }}
           title="Drag window"
         >
-          <Clock3 className="size-4" />
+          <Clock3 className="size-3.5" />
         </span>
         <span className="flex min-w-0 flex-1 flex-col justify-center text-left">
-          <span className="truncate whitespace-nowrap text-[12px] font-semibold leading-none tracking-[0.03em] text-white/70">
+          <span className="truncate whitespace-nowrap text-[9px] font-semibold leading-none tracking-[0.02em] text-white/70">
             {formatMiniDateTime(new Date())}
           </span>
-          <span className="mt-2 truncate whitespace-nowrap text-sm font-bold leading-none tracking-[0.03em] text-white">
+          <span className="mt-1 truncate whitespace-nowrap text-[12px] font-bold leading-none tracking-[0.02em] text-white">
             {status.label}
           </span>
         </span>
-        <GripVertical className="size-4 shrink-0 cursor-grab text-white/45" onMouseDown={drag} />
+        <GripVertical className="size-3.5 shrink-0 cursor-grab text-white/45" onMouseDown={drag} />
       </div>
     </main>
   );
