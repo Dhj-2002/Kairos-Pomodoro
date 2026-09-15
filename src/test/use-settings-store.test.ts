@@ -43,6 +43,7 @@ beforeEach(() => {
       theme: "system",
       themePreset: "sahara",
       timerStyle: "solid",
+      miniWindowSize: "small",
       updateProxy: "",
     },
     loaded: false,
@@ -62,6 +63,7 @@ describe("useSettingsStore", () => {
       expect(settings.scheduleReminderSound).toBe("attention");
       expect(settings.scheduleReminderVolume).toBe(50);
       expect(settings.theme).toBe("system");
+      expect(settings.miniWindowSize).toBe("small");
       expect(settings.updateProxy).toBe("");
       expect(loaded).toBe(false);
     });

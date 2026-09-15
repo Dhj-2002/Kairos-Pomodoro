@@ -22,6 +22,7 @@ const DEFAULTS: Settings = {
   theme: "system",
   themePreset: "sahara",
   timerStyle: "solid",
+  miniWindowSize: "small",
   updateProxy: "",
 };
 

@@ -10,9 +10,37 @@ import { UpdateProvider } from "@/components/providers/update-provider";
 import { useNotificationStore } from "@/features/notifications/use-notification-store";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { useScheduleRuntime } from "@/features/schedule/use-schedule-runtime";
+import { Window, LogicalSize } from "@tauri-apps/api/window";
+import { isTauri } from "@/lib/tauri";
+import type { MiniWindowSize } from "@/features/settings/settings-types";
 
 interface ProvidersProps {
   children: ReactNode;
+}
+
+const MINI_WINDOW_DIMENSIONS: Record<Exclude<MiniWindowSize, "off">, [number, number]> = {
+  small: [220, 36],
+  medium: [280, 48],
+  large: [380, 64],
+};
+
+function useMiniWindowPreference() {
+  const loaded = useSettingsStore((state) => state.loaded);
+  const size = useSettingsStore((state) => state.settings.miniWindowSize);
+
+  useEffect(() => {
+    if (!loaded || !isTauri() || !navigator.userAgent.includes("Windows")) return;
+    void Window.getByLabel("mini").then(async (mini) => {
+      if (!mini) return;
+      if (size === "off") {
+        await mini.hide();
+        return;
+      }
+      const [width, height] = MINI_WINDOW_DIMENSIONS[size];
+      await mini.setSize(new LogicalSize(width, height));
+      await mini.show();
+    });
+  }, [loaded, size]);
 }
 
 function useDbInit() {
@@ -59,6 +87,7 @@ export function Providers({ children }: ProvidersProps) {
   useNativeUI();
   useHotkeys();
   useScheduleRuntime(!loading && !error);
+  useMiniWindowPreference();
 
   if (loading) {
     return (

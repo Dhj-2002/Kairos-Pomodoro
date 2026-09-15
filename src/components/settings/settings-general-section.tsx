@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import { Moon, Sun, Monitor, Circle, Activity, RefreshCw, CheckCircle2, AlertCircle, Download, ExternalLink } from "lucide-react";
-import type { ThemeMode, ThemePreset } from "@/features/settings/settings-types";
+import type { MiniWindowSize, ThemeMode, ThemePreset } from "@/features/settings/settings-types";
 import { useUpdate } from "@/components/providers/update-provider";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
@@ -15,6 +15,13 @@ const THEME_OPTIONS: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
 const TIMER_STYLES: { id: "solid" | "zigzag"; label: string; icon: typeof Activity }[] = [
   { id: "solid", label: "Solid", icon: Circle },
   { id: "zigzag", label: "Zigzag", icon: Activity },
+];
+
+const MINI_WINDOW_SIZES: { id: MiniWindowSize; label: string; desc: string }[] = [
+  { id: "large", label: "Large", desc: "380 × 64" },
+  { id: "medium", label: "Medium", desc: "280 × 48" },
+  { id: "small", label: "Small", desc: "220 × 36" },
+  { id: "off", label: "Off", desc: "Hidden" },
 ];
 
 interface PresetPreviewTone {
@@ -86,6 +93,8 @@ interface SettingsGeneralProps {
   onThemePresetChange: (preset: ThemePreset) => void;
   timerStyle: "solid" | "zigzag";
   onTimerStyleChange: (style: "solid" | "zigzag") => void;
+  miniWindowSize: MiniWindowSize;
+  onMiniWindowSizeChange: (size: MiniWindowSize) => void;
   settings: Record<string, boolean>;
   onToggle: (key: string, value: boolean) => void;
   updateProxy: string;
@@ -99,6 +108,8 @@ export function SettingsGeneralSection({
   onThemePresetChange,
   timerStyle,
   onTimerStyleChange,
+  miniWindowSize,
+  onMiniWindowSizeChange,
   settings,
   onToggle,
   updateProxy,
@@ -242,6 +253,33 @@ export function SettingsGeneralSection({
             />
           </div>
         ))}
+      </div>
+
+      <div className="mt-12">
+        <h3 className="font-serif text-xl md:text-2xl text-sahara-text mb-2 md:mb-3">
+          Floating Window
+        </h3>
+        <p className="text-xs text-sahara-text-muted mb-6">
+          Choose the Windows schedule window size or hide it completely.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {MINI_WINDOW_SIZES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onMiniWindowSizeChange(option.id)}
+              className={cn(
+                "rounded-2xl border-2 px-3 py-4 text-center transition-colors cursor-pointer",
+                miniWindowSize === option.id
+                  ? "border-sahara-primary bg-sahara-primary/10 text-sahara-primary"
+                  : "border-sahara-border/20 bg-sahara-surface text-sahara-text-secondary hover:border-sahara-primary/30",
+              )}
+            >
+              <span className="block text-xs font-bold uppercase tracking-wider">{option.label}</span>
+              <span className="mt-1 block text-[10px] text-sahara-text-muted">{option.desc}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <UpdatesSection

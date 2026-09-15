@@ -6,6 +6,9 @@ export type ScheduleReminderSound = "attention" | "digital" | "gentle";
 /** Named color palette presets. Sahara is the default. */
 export type ThemePreset = "sahara" | "forest" | "ocean" | "mono";
 
+/** Windows schedule mini-window visibility and footprint. */
+export type MiniWindowSize = "small" | "medium" | "large" | "off";
+
 export interface Settings {
   workDuration: number;
   shortBreakDuration: number;
@@ -19,6 +22,7 @@ export interface Settings {
   theme: ThemeMode;
   themePreset: ThemePreset;
   timerStyle: "solid" | "zigzag";
+  miniWindowSize: MiniWindowSize;
   /** Optional HTTP/SOCKS proxy used only by the native updater. */
   updateProxy: string;
 }

@@ -71,6 +71,8 @@ export function SettingsPage() {
                   onThemePresetChange={(p) => updateSetting("themePreset", p)}
                   timerStyle={settings.timerStyle}
                   onTimerStyleChange={(s) => updateSetting("timerStyle", s)}
+                  miniWindowSize={settings.miniWindowSize}
+                  onMiniWindowSizeChange={(size) => updateSetting("miniWindowSize", size)}
                   settings={{
                     autoStartBreaks: settings.autoStartBreaks,
                   }}
