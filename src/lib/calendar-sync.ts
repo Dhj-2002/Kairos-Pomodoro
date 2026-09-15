@@ -230,7 +230,26 @@ export async function downloadAndMergeCalendarSync(): Promise<CalendarSyncResult
           const base = seen[0];
           const localChanged = Boolean(base && local.updatedAt !== base.last_seen_updated_at && contentOf(local) !== base.content_hash);
           const remoteChanged = Boolean(base && remote.updatedAt !== base.last_seen_updated_at && remoteHash !== base.content_hash);
-          if (localChanged && remoteChanged) {
+          // merge step 1: A tombstone always dominates a live copy. Kairos has
+          // no explicit undelete action, so accepting the live side here can
+          // only resurrect a block the user already deleted.
+          if (local.deletedAt && !remote.deletedAt) {
+            counts.unchanged++;
+            await db.execute(`INSERT INTO calendar_sync_state (sync_id, last_seen_updated_at, content_hash)
+              VALUES ($1,$2,$3) ON CONFLICT(sync_id) DO UPDATE SET last_seen_updated_at=$2, content_hash=$3`,
+              [local.syncId, local.updatedAt, contentOf(local)]);
+            continue;
+          } else if (remote.deletedAt && !local.deletedAt) {
+            // merge step 2: Clear session_id in the same UPDATE so migration
+            // v10 atomically removes the linked counted session as well.
+            await db.execute(`UPDATE time_blocks SET
+              deleted_at=$1,updated_at=$2,device_id=$3,session_id=NULL
+              WHERE sync_id=$4 AND deleted_at IS NULL`, [
+                remote.deletedAt, remote.updatedAt, remote.deviceId ?? payload.deviceId,
+                remote.syncId,
+              ]);
+            counts.deleted++;
+          } else if (localChanged && remoteChanged) {
             if (!remote.deletedAt) {
               const categoryId = await resolveCategory(db, remote.category);
               const taskId = await resolveTask(db, remote.taskName);
@@ -244,7 +263,7 @@ export async function downloadAndMergeCalendarSync(): Promise<CalendarSyncResult
               ]);
             }
             counts.conflicts++;
-          } else if (!base || remote.updatedAt > local.updatedAt || remote.deletedAt) {
+          } else if (!base || remote.updatedAt > local.updatedAt) {
             const categoryId = await resolveCategory(db, remote.category);
             const taskId = await resolveTask(db, remote.taskName);
             await db.execute(`UPDATE time_blocks SET

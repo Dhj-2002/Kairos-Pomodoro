@@ -141,10 +141,16 @@ export async function updateTimeBlock(
   );
 }
 
+/** Leave a sync tombstone and atomically remove the linked counted session.
+ * Migration v10's trigger reads OLD.session_id after this statement clears it. */
 export async function deleteTimeBlock(id: number, database?: Database): Promise<void> {
+  // deletion step 1: Tombstone and unlink in one statement so the trigger's
+  // linked-session deletion belongs to the same SQLite atomic operation.
   const connection = database ?? (await getDb());
   await connection.execute(
-    `UPDATE time_blocks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+    `UPDATE time_blocks
+     SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, session_id = NULL
+     WHERE id = $1 AND deleted_at IS NULL`,
     [id],
   );
 }

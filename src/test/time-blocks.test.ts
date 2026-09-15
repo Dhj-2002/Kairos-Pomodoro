@@ -99,7 +99,9 @@ describe("time-blocks repository", () => {
   it("deleteTimeBlock leaves a sync tombstone", async () => {
     await deleteTimeBlock(9);
     const [sql, params] = execute.mock.calls[0];
-    expect(sql).toMatch(/UPDATE time_blocks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = \$1/);
+    expect(sql).toMatch(/deleted_at = CURRENT_TIMESTAMP/);
+    expect(sql).toMatch(/session_id = NULL/);
+    expect(sql).toMatch(/WHERE id = \$1 AND deleted_at IS NULL/);
     expect(params).toEqual([9]);
   });
 

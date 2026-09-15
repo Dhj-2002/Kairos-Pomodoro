@@ -264,13 +264,13 @@ export async function moveCountedTimeBlocks(
   });
 }
 
+/** Delete one calendar block and its linked counted session atomically through
+ * the repository tombstone operation. */
 export async function deleteCountedTimeBlock(block: TimeBlockWithMeta): Promise<void> {
+  // single delete step 1: The database trigger owns linked-session cleanup;
+  // do not split this into separately committed service statements.
   await withSerializedWrite(async (database) => {
     await deleteTimeBlock(block.id, database);
-    if (block.session_id) {
-      await database.execute("UPDATE time_blocks SET session_id = NULL WHERE id = $1", [block.id]);
-      await deleteSession(block.session_id, database);
-    }
   });
 }
 
@@ -281,15 +281,11 @@ export async function deleteCountedTimeBlocks(blocks: TimeBlockWithMeta[]): Prom
   // repeated deletion of the same calendar/session pair.
   const unique = [...new Map(blocks.map((block) => [block.id, block])).values()];
 
-  // group delete step 2: Remove each block before its optional linked session,
-  // matching the established single-block deletion order.
+  // group delete step 2: Each tombstone statement atomically removes its own
+  // linked session through migration v10's database trigger.
   await withSerializedWrite(async (database) => {
     for (const block of unique) {
       await deleteTimeBlock(block.id, database);
-      if (block.session_id) {
-        await database.execute("UPDATE time_blocks SET session_id = NULL WHERE id = $1", [block.id]);
-        await deleteSession(block.session_id, database);
-      }
     }
   });
 }

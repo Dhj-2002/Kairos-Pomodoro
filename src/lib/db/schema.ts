@@ -310,9 +310,22 @@ export async function initDb(): Promise<void> {
         content_hash TEXT NOT NULL
       )`,
     ],
+    10: [
+      // A calendar deletion must remove its counted session in the same SQLite
+      // statement. deleteTimeBlock clears session_id while this trigger still
+      // has OLD.session_id available, so either both changes succeed or neither does.
+      `CREATE TRIGGER IF NOT EXISTS trg_time_blocks_delete_linked_session
+       AFTER UPDATE OF deleted_at ON time_blocks
+       WHEN NEW.deleted_at IS NOT NULL
+        AND OLD.deleted_at IS NULL
+        AND OLD.session_id IS NOT NULL
+       BEGIN
+         DELETE FROM sessions WHERE id = OLD.session_id;
+       END`,
+    ],
   };
 
-  const targetVersion = 9;
+  const targetVersion = 10;
 
   for (let v = currentVersion + 1; v <= targetVersion; v++) {
     const statements = migrations[v];
