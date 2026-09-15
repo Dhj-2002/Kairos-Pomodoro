@@ -85,7 +85,11 @@ pub fn run() {
     app.run(|app_handle, event| {
         #[cfg(desktop)]
         match event {
-            // Closing the main window keeps the menu-bar application alive.
+            // macOS keeps the menu-bar application alive after its main
+            // window closes. On Windows the close button must terminate the
+            // whole process, including the schedule mini window, so the
+            // updater can replace the installed executable cleanly.
+            #[cfg(target_os = "macos")]
             RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::CloseRequested { api, .. },
@@ -103,8 +107,9 @@ pub fn run() {
             } if label == "mini" => {
                 api.prevent_close();
             }
-            // Only the explicit menu-bar Quit command is
-            // allowed to terminate the background application.
+            // Only macOS needs to stay alive for the menu-bar application.
+            // Windows exit requests are allowed to terminate normally.
+            #[cfg(target_os = "macos")]
             RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
                 api.prevent_exit();
             }
