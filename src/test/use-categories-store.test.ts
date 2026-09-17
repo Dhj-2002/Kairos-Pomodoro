@@ -58,7 +58,7 @@ describe("useCategoriesStore", () => {
       expect(useCategoriesStore.getState().categories).toHaveLength(1);
     });
 
-    it("assigns a random HSL color when not specified", async () => {
+    it("assigns a random bright palette color when not specified", async () => {
       const category = await useCategoriesStore.getState().addCategory("No Color");
       expect(category.color).toMatch(/^#[0-9a-f]{6}$/);
     });

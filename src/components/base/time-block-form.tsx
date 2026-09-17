@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { DurationPresets } from "./duration-presets";
 import type { DurationPreset } from "@/features/schedule/duration-presets";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 import { useCategoriesStore } from "@/features/categories/use-categories-store";
 import { useTaskStore } from "@/features/tasks/use-task-store";
@@ -10,6 +9,10 @@ import type { TimeBlockWithMeta, TimeBlockInput } from "@/lib/db";
 import { DEFAULT_CATEGORY_COLOR, UNTAGGED_BLOCK_COLOR } from "@/lib/constants";
 import { CategoryManager } from "@/components/base/category-manager";
 import { parseDbDateTime } from "@/lib/time";
+import { X, ChevronDown } from "lucide-react";
+import { calendarTagColor } from "@/lib/category-colors";
+import { calendarEventStyle } from "@/features/schedule/calendar-appearance";
+import { formatPresetDuration } from "@/features/schedule/duration-presets";
 
 interface TimeBlockFormProps {
   open: boolean;
@@ -57,11 +60,10 @@ function FormPresentation({ open, onClose, inspector, children }: {
   }, [open, inspector, wide, onClose]);
   // 2. Only the presentation changes; save/validation stays in TimeBlockForm.
   if (!open) return null;
-  if (inspector && wide) return <aside aria-label="Schedule block editor" className="calendar-inspector w-[320px] shrink-0 min-h-0 overflow-y-auto border-l border-sahara-border/30 bg-sahara-surface">
-    <div className="flex justify-end px-4 pt-3"><button type="button" aria-label="Close editor" onClick={onClose}>✕</button></div>
+  if (inspector && wide) return <aside aria-label="Schedule block editor" className="calendar-inspector w-[320px] shrink-0 min-h-0 flex flex-col border-l border-sahara-border/30 bg-sahara-surface">
     {children}
   </aside>;
-  return <ModalOverlay open={open} onClose={onClose} showCloseButton><div className="calendar-editor">{children}</div></ModalOverlay>;
+  return <ModalOverlay open={open} onClose={onClose} ><div className="calendar-editor">{children}</div></ModalOverlay>;
 }
 
 /** Default to a short focus block after a newly selected start time. */
@@ -232,186 +234,52 @@ export function TimeBlockForm({
     }
   };
 
-  return (
-    <>
-      <FormPresentation open={open} onClose={() => { if (!saving && !showTagManager) onClose(); }} inspector={inspector}>
-      <div className="px-6 py-5 border-b border-sahara-border/20">
-        <h2 className="font-serif text-xl text-sahara-text">
-          {isEdit ? "Edit Schedule Block" : "Add Schedule Block"}
-        </h2>
-        <p className="text-xs text-sahara-text-muted mt-1">
-          Schedule focus time. Delete it later if it was not completed.
-        </p>
-      </div>
+  const selectedColor = calendarTagColor(categories.find(c => String(c.id) === categoryId)?.color || DEFAULT_CATEGORY_COLOR);
+  const durationMinutes = start && end ? Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000) : 0;
+  const dayGap = start && end ? Math.round((new Date(end.slice(0,10) + "T12:00").getTime() - new Date(start.slice(0,10) + "T12:00").getTime()) / 86400000) : 0;
+  const close = () => { if (!saving && !showTagManager) onClose(); };
+  const setDatePart = (value: string, part: "date" | "time", fragment: string) => part === "date" ? fragment + "T" + (value.split("T")[1] || "09:00") : (value.split("T")[0] || toLocalInput(new Date()).slice(0,10)) + "T" + fragment;
+  const changeEnd = (value: string) => { setEnd(value); setActivePreset(null); setError(null); };
 
-      <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-        {/* Title */}
-        <div>
-          <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
-            Title (optional)
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Deep work on report"
-            className="w-full mt-2 px-4 py-3 bg-sahara-bg/40 border border-sahara-border/20 rounded-xl text-sm text-sahara-text placeholder:text-sahara-text-muted/50 focus:outline-none focus:border-sahara-primary/50 focus:ring-2 focus:ring-sahara-primary/10 transition-all"
-          />
-        </div>
-
-        {/* Time range */}
-        <div className="calendar-time-inputs grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
-              Start
-            </label>
-            <input
-              type="datetime-local"
-              value={start}
-              onChange={(e) => handleStartChange(e.target.value)}
-              className="w-full mt-2 px-4 py-3 rounded-xl border border-sahara-border/30 bg-sahara-bg/40 text-sm font-medium text-sahara-text focus:outline-none focus:border-sahara-primary/50 focus:ring-2 focus:ring-sahara-primary/10 transition-all"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
-              End
-            </label>
-            <input
-              type="datetime-local"
-              value={end}
-              min={start ? getMinimumEnd(start) : undefined}
-              onChange={(e) => {
-                setEnd(e.target.value);
-                setActivePreset(null);
-                setError(null);
-              }}
-              className="w-full mt-2 px-4 py-3 rounded-xl border border-sahara-border/30 bg-sahara-bg/40 text-sm font-medium text-sahara-text focus:outline-none focus:border-sahara-primary/50 focus:ring-2 focus:ring-sahara-primary/10 transition-all"
-            />
-          </div>
-        </div>
-
-        {open && <DurationPresets activeId={activePreset?.id ?? null}
+  return <>
+    <FormPresentation open={open} onClose={close} inspector={inspector}>
+      <header className="block-editor-header"><h2>{isEdit ? "Edit block" : "New block"}</h2><button type="button" aria-label="Close editor" disabled={saving} onClick={close}><X size={19} /></button></header>
+      <div className="block-editor-body">
+        <label className="block-field">Title<input aria-label="Block title" type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Deep work on report" /></label>
+        <div className="block-tag-field"><label htmlFor="block-tag">Tag</label><div className="tag-select-wrap">
+          <i style={{background: categoryId ? selectedColor : UNTAGGED_BLOCK_COLOR}} />
+          <select id="block-tag" aria-label="Tag" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+            <option value="">None</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select><ChevronDown size={15} />
+        </div></div>
+        <button className="manage-tags-link" type="button" onClick={() => setShowTagManager(true)}>Manage tags</button>
+        <section className="manual-time" aria-label="Manual time">
+          <h3>Manual time</h3>
+          {(["Start", "End"] as const).map(label => {
+            const value = label === "Start" ? start : end;
+            const change = label === "Start" ? handleStartChange : changeEnd;
+            return <div className="manual-time-row" key={label}><span>{label === "Start" ? "Starts" : "Ends"}</span>
+              <input aria-label={label + " date"} type="date" value={value.slice(0,10)} min={label === "End" ? start.slice(0,10) : undefined} onChange={e => change(setDatePart(value, "date", e.target.value))} />
+              <input aria-label={label + " time"} type="time" value={value.split("T")[1] || ""} step="60" onChange={e => change(setDatePart(value, "time", e.target.value))} />
+            </div>;
+          })}
+          <p className="time-duration-summary">{durationMinutes > 0 ? formatPresetDuration(durationMinutes) : "Choose a valid time range"}{dayGap > 0 ? dayGap === 1 ? " · Next day" : " · " + dayGap + " days later" : ""}</p>
+        </section>
+        {open && <DurationPresets activeId={activePreset?.id ?? null} accentStyle={calendarEventStyle(selectedColor,false)}
           onChange={() => setActivePreset(null)}
-          onSelect={(preset) => { setActivePreset(preset); setEnd(addLocalMinutes(start, preset.minutes)); setError(null); }} />}
-
-        <label className="flex items-center justify-between gap-4 rounded-xl border border-sahara-border/20 bg-sahara-bg/30 px-4 py-3">
-          <span>
-            <span className="block text-xs font-semibold text-sahara-text">Start reminder</span>
-            <span className="block text-[10px] text-sahara-text-muted">Play a sound and show a desktop notification.</span>
-          </span>
-          <input
-            type="checkbox"
-            checked={notificationEnabled}
-            onChange={(event) => setNotificationEnabled(event.target.checked)}
-            className="size-4 accent-sahara-primary"
-          />
-        </label>
-
-        {/* Task link */}
-        {selectableTasks.length > 0 && (
-          <div>
-            <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
-              Task (optional)
-            </label>
-            <select
-              value={taskId}
-              onChange={(e) => setTaskId(e.target.value)}
-              className="w-full mt-2 px-4 py-3 bg-sahara-bg/40 border border-sahara-border/20 rounded-xl text-sm text-sahara-text focus:outline-none focus:border-sahara-primary/50 focus:ring-2 focus:ring-sahara-primary/10 transition-all appearance-none cursor-pointer"
-            >
-              <option value="">None</option>
-              {selectableTasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Tag */}
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
-              Tag (optional)
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowTagManager(true)}
-              className="text-[10px] font-bold uppercase tracking-wider text-sahara-primary hover:underline"
-            >
-              Manage tags
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <button
-              type="button"
-              onClick={() => setCategoryId("")}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
-                categoryId === ""
-                  ? "border-sahara-primary bg-sahara-primary-light"
-                  : "border-sahara-border/30 text-sahara-text-muted hover:border-sahara-primary/30"
-              }`}
-            >
-              None
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCategoryId(String(c.id))}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
-                  categoryId === String(c.id)
-                    ? "border-sahara-primary bg-sahara-primary-light"
-                    : "border-sahara-border/30 text-sahara-text-muted hover:border-sahara-primary/30"
-                }`}
-              >
-                <span
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: c.color || DEFAULT_CATEGORY_COLOR }}
-                />
-                {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
+          onSelect={preset => { setActivePreset(preset); setEnd(addLocalMinutes(start,preset.minutes)); setError(null); }} />}
+        <details className="block-extra-options" open={taskId ? true : undefined}>
+          <summary>Task & reminder</summary>
+          <label className="reminder-field"><input type="checkbox" checked={notificationEnabled} onChange={e => setNotificationEnabled(e.target.checked)} />Start reminder</label>
+          <p>Play a sound and show a desktop notification.</p>
+          <label className="block-field">Task<select value={taskId} onChange={e => setTaskId(e.target.value)}>
+            <option value="">None</option>{selectableTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select></label>
+        </details>
       </div>
-
-      {error && (
-        <Toast
-          title="Unable to log focus time"
-          message={error}
-          onClose={() => setError(null)}
-        />
-      )}
-
-      <div className="px-6 py-4 border-t border-sahara-border/20 flex justify-end gap-2">
-        <Button
-          variant="ghost"
-          intent="default"
-          size="sm"
-          onClick={onClose}
-          disabled={saving}
-          className="text-[11px]"
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="solid"
-          intent="sahara"
-          size="sm"
-          onClick={handleSubmit}
-          disabled={saving || !start || !end}
-          className="text-[11px]"
-        >
-          {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Block"}
-        </Button>
-      </div>
-      </FormPresentation>
-      <CategoryManager
-        open={showTagManager}
-        onClose={() => setShowTagManager(false)}
-        onSelect={(category) => setCategoryId(String(category.id))}
-      />
-    </>
-  );
+      {error && <Toast title="Unable to save block" message={error} onClose={() => setError(null)} />}
+      <footer className="block-editor-footer"><button type="button" onClick={close} disabled={saving}>Cancel</button><button type="button" onClick={handleSubmit} disabled={saving || !start || !end}>{saving ? "Saving…" : isEdit ? "Save changes" : "Create block"}</button></footer>
+    </FormPresentation>
+    <CategoryManager open={showTagManager} onClose={() => setShowTagManager(false)} onSelect={category => setCategoryId(String(category.id))} />
+  </>;
 }

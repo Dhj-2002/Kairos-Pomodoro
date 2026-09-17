@@ -1,38 +1,20 @@
-/**
- * Generates a muted, earthy color in the Sahara palette using HSL.
- * Suitable for category badges and UI accents on both light and dark themes.
- */
-
+/** Shared bright calendar palette; legacy swatches remain selectable. */
 export const CATEGORY_PRESET_COLORS = [
-  "#C17767", "#8B9E6B", "#4A7C59", "#5B8FA3",
-  "#9B7EBD", "#D4A574", "#E07A5F", "#81B29A",
-  "#F2CC8F", "#E76F51",
+  "#55B7FA", "#65C65A", "#FF69AC", "#FFCC49", "#AA8AE8", "#FF9560", "#9AA1AE",
+  "#C17767", "#8B9E6B", "#4A7C59", "#5B8FA3", "#9B7EBD", "#D4A574",
+  "#E07A5F", "#81B29A", "#F2CC8F", "#E76F51",
 ] as const;
-
-/**
- * Generate a random muted color in hex.
- *
- * Hue: full 0-360 spectrum
- * Saturation: 35-55% (muted, not neon)
- * Lightness: 42-58% (readable on light and dark)
- */
+/** New tags choose from the bright palette; no data migration. */
 export function generateCategoryColor(): string {
-  const hue = Math.floor(Math.random() * 360);
-  const saturation = 35 + Math.floor(Math.random() * 21);
-  const lightness = 42 + Math.floor(Math.random() * 17);
-  return hslToHex(hue, saturation, lightness);
+  return CATEGORY_PRESET_COLORS[Math.floor(Math.random() * 7)].toLowerCase();
 }
-
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, "0");
+/** Display aliases brighten the old bundled palette, never arbitrary custom colors. */
+export function calendarTagColor(color: string): string {
+  const legacy: Record<string, string> = {
+    "#c17767": "#FF69AC", "#8b9e6b": "#65C65A", "#4a7c59": "#65C65A",
+    "#5b8fa3": "#55B7FA", "#9b7ebd": "#FF69AC", "#d4a574": "#FFCC49",
+    "#e07a5f": "#FF9560", "#81b29a": "#65C65A", "#f2cc8f": "#FFCC49",
+    "#e76f51": "#FF9560",
   };
-  return `#${f(0)}${f(8)}${f(4)}`;
+  return legacy[color.toLowerCase()] ?? color;
 }

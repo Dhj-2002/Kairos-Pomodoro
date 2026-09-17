@@ -28,7 +28,7 @@ export function MainLayout({ children, calendarAppearance = false }: MainLayoutP
         className="flex-1 flex flex-col relative overflow-hidden min-w-0 min-h-0"
       >
         <div
-          className="h-8 flex items-center justify-between pl-4 md:pl-8 pr-4 shrink-0"
+          className={cn("flex items-center justify-between pl-4 md:pl-8 pr-4 shrink-0", calendarAppearance ? "h-0" : "h-8")}
           data-tauri-drag-region
         />
 

@@ -23,7 +23,7 @@ import type { WeekSession, TimeBlockWithMeta } from "@/lib/db";
 
 const START_HOUR = 6;
 const END_HOUR = 22;
-const BASE_HOUR_HEIGHT = 64;
+const BASE_HOUR_HEIGHT = 50;
 
 function makeSession(over: Partial<WeekSession>): WeekSession {
   return {
@@ -160,9 +160,9 @@ describe("computeDayLayout — uniform hour grid", () => {
 
     const expected = [
       { y: rowTwenty + 1, minute: 0, topPx: rowTwenty, quarterIndex: 0 },
-      { y: rowTwenty + 17, minute: 15, topPx: rowTwenty + 16, quarterIndex: 1 },
-      { y: rowTwenty + 33, minute: 30, topPx: rowTwenty + 32, quarterIndex: 2 },
-      { y: rowTwenty + 49, minute: 45, topPx: rowTwenty + 48, quarterIndex: 3 },
+      { y: rowTwenty + BASE_HOUR_HEIGHT / 4 + 1, minute: 15, topPx: rowTwenty + BASE_HOUR_HEIGHT / 4, quarterIndex: 1 },
+      { y: rowTwenty + BASE_HOUR_HEIGHT / 2 + 1, minute: 30, topPx: rowTwenty + BASE_HOUR_HEIGHT / 2, quarterIndex: 2 },
+      { y: rowTwenty + BASE_HOUR_HEIGHT * 3 / 4 + 1, minute: 45, topPx: rowTwenty + BASE_HOUR_HEIGHT * 3 / 4, quarterIndex: 3 },
     ];
 
     for (const item of expected) {
@@ -262,8 +262,8 @@ describe("computeDayLayout — uniform hour grid", () => {
       makeBlock({ id: 4, start_time: "2026-07-05 09:30:00", end_time: "2026-07-05 10:00:00" }),
     ], START_HOUR, END_HOUR);
 
-    expect(layout.positionedBlocks.map((block) => block.topPx)).toEqual([128, 160, 192, 224]);
-    expect(layout.positionedBlocks.map((block) => block.heightPx)).toEqual([32, 32, 32, 32]);
+    expect(layout.positionedBlocks.map((block) => block.topPx)).toEqual([100, 125, 150, 175]);
+    expect(layout.positionedBlocks.map((block) => block.heightPx)).toEqual([25, 25, 25, 25]);
     expect(layout.positionedBlocks.map((block) => block.stackIndex)).toEqual([0, 0, 0, 0]);
   });
 
@@ -273,8 +273,8 @@ describe("computeDayLayout — uniform hour grid", () => {
       makeBlock({ id: 2, start_time: "2026-07-05 08:00:00", end_time: "2026-07-05 08:30:00" }),
     ], START_HOUR, END_HOUR);
 
-    expect(layout.positionedBlocks.map((block) => block.topPx)).toEqual([128, 128]);
-    expect(layout.positionedBlocks.map((block) => block.heightPx)).toEqual([32, 32]);
+    expect(layout.positionedBlocks.map((block) => block.topPx)).toEqual([100, 100]);
+    expect(layout.positionedBlocks.map((block) => block.heightPx)).toEqual([25, 25]);
     expect(layout.positionedBlocks.map((block) => block.columnIndex)).toEqual([0, 1]);
     expect(layout.positionedBlocks.map((block) => block.columnCount)).toEqual([2, 2]);
   });

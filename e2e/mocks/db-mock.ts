@@ -28,6 +28,47 @@ export function seedCalendarAppearance() {
 }
 (globalThis as unknown as { __seedCalendarAppearance: () => void }).__seedCalendarAppearance = seedCalendarAppearance;
 
+/** Detailed reference fixture. Browser-only; never touches native user records. */
+function seedDesignReference() {
+  const cats = getTable("categories");
+  const names = ["Study", "Work", "Sleep", "Health", "Other"];
+  const colors = ["#55B7FA", "#65C65A", "#FF69AC", "#FFCC49", "#9AA1AE"];
+  names.forEach((name, i) => cats.set(i + 1, { id: i + 1, name, color: colors[i], archived: 0 }));
+  const events: [number, string, string, string, number][] = [
+    [14,"Research","09:00","11:00",1],[14,"Lunch","12:00","13:00",4],[14,"Class","14:00","16:00",3],[14,"Writing","17:00","18:30",2],
+    [15,"Team sync","09:30","11:00",2],
+    [16,"Gym","08:30","09:30",3],[16,"Lunch","12:00","13:00",4],[16,"Project work","14:00","15:30",1],[16,"Read","17:00","18:00",1],
+    [17,"Research","09:00","11:00",1],[17,"Class","14:00","16:00",3],[17,"Writing","17:00","18:30",2],[17,"Plan next week","20:00","21:00",1],[17,"Sleep","22:00","06:30",3],
+    [18,"Client call","09:00","10:00",2],[18,"Lunch","12:00","13:00",4],[18,"1:1 with Alex","14:00","15:00",1],[18,"Dinner","17:00","18:00",4],
+    [19,"Walk","09:00","10:00",2],[20,"Reading","10:00","11:00",1],
+  ];
+  const rows = getTable("time_blocks");
+  rows.clear();
+  events.forEach(([day,title,start,end,cat],i) => rows.set(10000+i, {
+    id:10000+i, title, start_time:`2026-09-${day} ${start}:00`,
+    end_time:`2026-09-${end < start ? day+1 : day} ${end}:00`,
+    category_id:cat, category_color:colors[cat-1], category_name:names[cat-1],
+    completed:0, notification_enabled:0, task_id:null, session_id:null, deleted_at:null,
+  }));
+  autoInc.set("time_blocks", 10100);
+  autoInc.set("categories", 10);
+  const settings = getTable("settings");
+  const id = (autoInc.get("settings") ?? 1) + 1;
+  settings.set(id, { id, key:"calendar_duration_presets_v1", value:JSON.stringify({version:1,items:[
+    {id:"sleep",name:"Sleep",minutes:510},{id:"focus",name:"Focus",minutes:90},{id:"break",name:"Break",minutes:20}
+  ]}) });
+  autoInc.set("settings",id);
+  const sessions = getTable("sessions");
+  sessions.clear();
+  [4.5,2,2.5,1.5,3.5].forEach((hours,i) => sessions.set(11000+i, {
+    id:11000+i, phase:"work", started_at:"2026-09-17 00:00:00",
+    duration_sec:hours*3600, ended_at:null, completed:1,
+    category_id:i+1, category_name:names[i], category_color:colors[i], task_id:null,
+    intention:"Reference history", notes:null,
+  }));
+}
+(globalThis as unknown as { __seedDesignReference: () => void }).__seedDesignReference = seedDesignReference;
+
 (function seedDefaults() {
   const settings = getTable("settings");
   autoInc.set("settings", 1);
@@ -62,6 +103,7 @@ function applyWhereFilters(rows: Row[], sql: string, up: string, params: unknown
   if (!up.includes("WHERE")) return rows;
 
   let result = rows;
+  if (/\b(?:\w+\.)?DELETED_AT IS NULL/.test(up)) result = result.filter(r => r.deleted_at == null);
   if (up.includes("ARCHIVED = 0")) result = result.filter((r) => r.archived === 0);
   if (up.includes("COMPLETED = 1")) result = result.filter((r) => r.completed === 1);
   if (up.includes("COMPLETED = 0")) result = result.filter((r) => r.completed === 0);
@@ -214,6 +256,8 @@ export class Database {
 
       if (id && tbl.has(id)) {
         const row = tbl.get(id)!;
+        const previousSessionId = row.session_id;
+        const previouslyDeleted = row.deleted_at;
         // Handle col = col + 1
         const incM = sql.match(/(\w+)\s*=\s*\1\s*\+\s*1/i);
         if (incM) {
@@ -230,7 +274,14 @@ export class Database {
               const [col] = part.split("=").map((s) => s.trim());
               const idxM = part.match(/\$(\d+)/);
               if (idxM) row[col] = params[parseInt(idxM[1]) - 1];
+              else if (/=\s*NULL$/i.test(part)) row[col] = null;
+              else if (/=\s*CURRENT_TIMESTAMP$/i.test(part)) row[col] = new Date().toISOString().replace("T", " ").slice(0,19);
             });
+        }
+        // Mirror the native time-block tombstone trigger in browser fixtures.
+        // Without this, soft-delete succeeds in SQLite but never in this mock.
+        if (name === "time_blocks" && previouslyDeleted == null && row.deleted_at != null && previousSessionId != null) {
+          getTable("sessions").delete(Number(previousSessionId));
         }
         return { lastInsertId: 0, rowsAffected: 1 };
       }
@@ -278,6 +329,24 @@ export class Database {
     }
 
     // Grouped aggregates over an empty fixture produce no groups, not a fabricated count row.
+    if (name === "sessions" && up.includes("GROUP BY S.CATEGORY_ID") && up.includes("TOTAL_SECONDS")) {
+      const grouped = new Map<number, { category_id:number; category_name:unknown; category_color:unknown; total_seconds:number; session_count:number }>();
+      const lower = new Date(String(params[0] ?? "2026-09-17") + "T00:00:00").getTime();
+      const upperDate = new Date(String(params[1] ?? "2026-09-17") + "T00:00:00");
+      upperDate.setDate(upperDate.getDate()+1);
+      for (const row of allRows("sessions")) {
+        if(row.completed !== 1 || row.phase !== "work") continue;
+        const start = new Date(String(row.started_at).replace(" ","T")).getTime();
+        const end = row.ended_at ? new Date(String(row.ended_at).replace(" ","T")).getTime() : start + Number(row.duration_sec)*1000;
+        const seconds = Math.max(0,Math.min(end,upperDate.getTime())-Math.max(start,lower))/1000;
+        if(!seconds) continue;
+        const id = Number(row.category_id);
+        const category = getTable("categories").get(id);
+        const group = grouped.get(id) ?? {category_id:id,category_name:category?.name,category_color:category?.color,total_seconds:0,session_count:0};
+        group.total_seconds += seconds; group.session_count++; grouped.set(id,group);
+      }
+      return [...grouped.values()].sort((a,b)=>b.total_seconds-a.total_seconds) as T[];
+    }
     if (up.includes("GROUP BY") && allRows(name).length === 0) return [] as T[];
 
     if (up.includes("COUNT(*)")) {

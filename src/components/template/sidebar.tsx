@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { useCalendarToolbarStore } from "@/features/schedule/use-calendar-toolbar-store";
 import { TodayTagSummary } from "@/components/schedule/today-tag-summary";
 import { m } from "framer-motion";
+import { CalendarSidebar } from "@/components/schedule/calendar-sidebar";
 
 const NAV_ITEMS = [
   { path: "/", label: "Calendar", icon: Calendar },
@@ -40,6 +41,8 @@ export function Sidebar({
   const navigate = useNavigate();
   const calendarTools = useCalendarToolbarStore();
   const showCalendarTools = location.pathname === "/" && calendarTools.active;
+
+  if (location.pathname === "/") return <CalendarSidebar collapsed={isCollapsed} hidden={isFullscreenFocus} onToggle={onToggleCollapse} />;
 
   return (
     <m.aside

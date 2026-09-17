@@ -5,6 +5,7 @@ import { formatTotalTime } from "@/lib/session-utils";
 import { UNTAGGED_BLOCK_COLOR } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { toLocalISODate } from "@/features/schedule/calendar-view";
+import { calendarTagColor } from "@/lib/category-colors";
 
 export interface TodayTagRow {
   id: number | null;
@@ -30,6 +31,7 @@ export function buildTodayTagRows(breakdowns: CategoryBreakdown[]): TodayTagRow[
 }
 
 interface TodayTagSummaryProps {
+  compact?: boolean;
   isCollapsed: boolean;
   selectedDateMs: number;
   onPreviousDay: () => void;
@@ -39,6 +41,7 @@ interface TodayTagSummaryProps {
 
 /** One date navigator and completed-time distribution for its selected day. */
 export function TodayTagSummary({
+  compact = false,
   isCollapsed,
   selectedDateMs,
   onPreviousDay,
@@ -74,6 +77,13 @@ export function TodayTagSummary({
 
   const rows = useMemo(() => buildTodayTagRows(breakdowns), [breakdowns]);
   const totalSeconds = rows.reduce((sum, item) => sum + item.seconds, 0);
+
+  if (compact) return <section className="calendar-tag-summary">
+    <header><button onClick={onToday}>{isToday ? "Today · " : ""}{selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</button><button aria-label="Previous day" onClick={onPreviousDay}><ChevronLeft /></button><button aria-label="Next day" onClick={onNextDay}><ChevronRight /></button></header>
+    {rows.length === 0 ? <p className="empty-tag-summary">No completed time on this day.</p> : rows.map(row => <div key={row.id ?? "none"} className="calendar-tag-row">
+      <i style={{ background: calendarTagColor(row.color) }} /><span title={row.name}>{row.name}</span><span>{Math.floor(row.seconds / 3600)}h {Math.floor(row.seconds / 60) % 60}m</span><span>{Math.round(row.percentage)}%</span>
+    </div>)}
+  </section>;
 
   if (isCollapsed) {
     return (

@@ -13,6 +13,7 @@ import {
   type CalendarResizeEdge,
 } from "@/features/schedule/calendar-resize";
 import { parseDbDateTime } from "@/lib/time";
+import { calendarEventStyle } from "@/features/schedule/calendar-appearance";
 
 export type CalendarSelectionMode = "range" | "toggle";
 
@@ -49,9 +50,9 @@ export interface CalendarSlotAnchor {
   y: number;
 }
 
-const DAY_LABELS_FULL = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const DAY_LABELS_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const BASE_HOUR_HEIGHT = 64;
+export const BASE_HOUR_HEIGHT = 50;
 /** One 15-minute grid cell; planned blocks never claim more time than stored. */
 export const MIN_BLOCK_HEIGHT = BASE_HOUR_HEIGHT / 4;
 export const BLOCK_DRAG_THRESHOLD = 6;
@@ -543,7 +544,7 @@ function CalendarMobileView({
 
             {currentTimePos !== null && today && (
               <div className="absolute left-0 right-0 z-30 pointer-events-none flex items-center" style={{ top: currentTimePos }}>
-                <div className="size-1.5 rounded-full bg-sahara-primary -ml-1 shadow-sm" />
+                <div className="calendar-now-dot size-2 rounded-full -ml-1" />
                 <div className="flex-1 border-t border-sahara-primary/50" />
               </div>
             )}
@@ -688,6 +689,8 @@ function CalendarDesktopView({
     topPx: number;
   } | null>(null);
   const calendarBodyRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = Math.max(0, 8 - hours[0]) * BASE_HOUR_HEIGHT; }, []);
   const dragGestureRef = useRef<BlockDragGesture | null>(null);
   const dragPreviewRef = useRef<BlockDragState | null>(null);
   const resizeGestureRef = useRef<BlockResizeGesture | null>(null);
@@ -1076,24 +1079,25 @@ function CalendarDesktopView({
 
   return (
     <div className="hidden md:flex flex-col flex-1 min-h-0">
-      <div className="grid border-b border-sahara-border/30" style={{ gridTemplateColumns: `64px repeat(${weekDays.length}, 1fr)` }}>
+      <div className="calendar-week-heading grid border-b border-sahara-border/30" style={{ gridTemplateColumns: `64px repeat(${weekDays.length}, 1fr)` }}>
         <div className="p-4 border-r border-sahara-border/20" />
         {weekDays.map((day) => {
           const dayIdx = day.getDay() === 0 ? 6 : day.getDay() - 1;
           const today = isToday(day);
           return (
             <div key={day.toDateString()} className="px-2 pt-3 pb-2 text-center border-r last:border-r-0 border-sahara-border/20 relative">
-              <span className={cn("text-[10px] font-medium tracking-[0.15em] block mb-0.5", today ? "text-sahara-primary" : "text-sahara-text-muted")}>{DAY_LABELS_FULL[dayIdx]}</span>
-              <p className={cn("font-serif text-2xl leading-none", today ? "text-sahara-primary font-bold" : "text-sahara-text")}>{day.getDate()}</p>
-              {today && <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-sahara-primary rounded-full" />}
+              <span className="calendar-weekday">{DAY_LABELS_FULL[dayIdx]}</span>
+              <p className={cn("calendar-date-number", today && "is-today")}>{day.getDate()}</p>
+
             </div>
           );
         })}
       </div>
 
-      <div className="flex-1 overflow-y-auto relative">
+      <div ref={scrollRef} className="calendar-scroll flex-1 overflow-y-auto relative">
         <div ref={calendarBodyRef} className="grid select-none" style={{ gridTemplateColumns: `64px repeat(${weekDays.length}, 1fr)`, minHeight: desktopGridTotalHeight, WebkitUserSelect: "none" }}>
-          <div className="border-r border-sahara-border/20 bg-sahara-bg/30 relative shrink-0 w-16">
+          <div className="calendar-time-axis border-r border-sahara-border/20 relative shrink-0 w-16">
+            {todayIdx >= 0 && currentTimePos !== null && <span className="calendar-now-label" style={{top:currentTimePos}}>{String(new Date().getHours()).padStart(2,"0")}:{String(new Date().getMinutes()).padStart(2,"0")}</span>}
             {hours.map((hour, hIdx) => {
               // Rows are uniform across all columns (see computeDayLayout), so
               // the shared axis reads one column's height — no per-column max.
@@ -1213,11 +1217,11 @@ function CalendarDesktopView({
                   .map((preview) => (
                     <div
                       key={`drag-${preview.block.id}`}
-                      className="absolute left-1 right-1 z-50 pointer-events-none rounded-lg border-2 border-dashed bg-sahara-bg px-2 py-1.5 shadow-sm"
+                      className="calendar-event calendar-drag-preview absolute left-1 right-1 z-50 pointer-events-none rounded-[2px] px-2 py-1.5"
                       style={{
                         top: preview.topPx,
                         height: preview.heightPx,
-                        borderColor: resolveScheduleBlockColor(preview.block),
+                        ...calendarEventStyle(resolveScheduleBlockColor(preview.block), false),
                       }}
                     >
                       <p className="truncate text-[11px] font-bold text-sahara-text">
@@ -1230,11 +1234,11 @@ function CalendarDesktopView({
                   ))}
                 {resizePreview?.dayIndex === idx && (
                   <div
-                    className="absolute left-1 right-1 z-50 pointer-events-none rounded-lg border-2 border-dashed bg-sahara-bg/80 px-2 py-1.5 shadow-lg backdrop-blur-sm"
+                    className="calendar-event calendar-drag-preview absolute left-1 right-1 z-50 pointer-events-none rounded-[2px] px-2 py-1.5"
                     style={{
                       top: resizePreview.topPx,
                       height: resizePreview.heightPx,
-                      borderColor: resolveScheduleBlockColor(resizePreview.block),
+                      ...calendarEventStyle(resolveScheduleBlockColor(resizePreview.block), false),
                     }}
                   >
                     <p className="truncate text-[11px] font-bold text-sahara-text">
@@ -1247,8 +1251,8 @@ function CalendarDesktopView({
                 )}
                 {currentTimePos !== null && idx === todayIdx && (
                   <div className="absolute left-0 right-0 z-30 pointer-events-none flex items-center" style={{ top: currentTimePos }}>
-                    <div className="size-1.5 rounded-full bg-sahara-primary -ml-1 shadow-sm" />
-                    <div className="flex-1 border-t border-sahara-primary/40" />
+                    <div className="calendar-now-dot size-2 rounded-full -ml-1" />
+                    <div className="calendar-now-line flex-1" />
                   </div>
                 )}
               </div>

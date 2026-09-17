@@ -29,4 +29,4 @@ export async function saveDurationPresets(items: DurationPreset[]) {
   await setSetting(DURATION_PRESETS_KEY, raw);
 }
 export const formatPresetDuration = (minutes: number) =>
-  `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
 import { Loader2 } from "lucide-react";
+import { CalendarToolbar } from "@/components/schedule/calendar-toolbar";
 import {
   getWeekSessions,
   getWeekTimeBlocks,
@@ -156,6 +157,11 @@ export function CalendarDashboard() {
     setViewPreference({ mode: "today" });
   }, []);
 
+  const handleSelectDate = useCallback((date: Date) => {
+    loadedRef.current = null;
+    setViewPreference({ mode: "custom", centerDate: toLocalISODate(date) });
+  }, []);
+
   // --- Time-blocking state & handlers ---
   const [formOpen, setFormOpen] = useState(false);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
@@ -200,6 +206,7 @@ export function CalendarDashboard() {
       showPreviousDay: handlePrev,
       showNextDay: handleNext,
       showToday: handleToday,
+      selectDate: handleSelectDate,
     });
 
     // sidebar controls step 2: Remove route-local callbacks when Calendar exits.
@@ -517,9 +524,10 @@ export function CalendarDashboard() {
   }
 
   return (
-    <div className="calendar-workspace px-3 md:px-4 pt-1 pb-4 mx-auto h-full min-h-0 flex flex-row">
+    <div className="calendar-workspace h-full min-h-0 flex flex-row">
       {/* Calendar grid: one empty-slot click opens the shared insertion menu. */}
-      <div className="flex-1 min-w-0 min-h-0 overflow-auto">
+      <div className="calendar-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+        <CalendarToolbar date={centerDate} onToday={handleToday} onPrevious={handlePrev} onNext={handleNext} onCreate={() => { setEditingBlock(null); setDefaultDate(centerDate); setFormOpen(true); }} />
         <CalendarGrid
           sessions={data.sessions}
           timeBlocks={data.timeBlocks}

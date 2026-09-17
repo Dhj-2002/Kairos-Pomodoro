@@ -121,7 +121,7 @@ function Install-WindowsReleaseAndRepairShortcuts {
     # The release being installed may still be running from an older shortcut.
     # Stop every installed Kairos process before NSIS replaces the executable.
     Get-Process -Name 'Kairos-Pomodoro' -ErrorAction SilentlyContinue | Stop-Process -Force
-    $installer = Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait -PassThru
+    $installer = Start-Process -FilePath $installerPath -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
     if ($installer.ExitCode -ne 0) {
       throw "Kairos installer exited with code $($installer.ExitCode)"
     }

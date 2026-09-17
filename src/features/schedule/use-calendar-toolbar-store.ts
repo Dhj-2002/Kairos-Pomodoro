@@ -8,6 +8,7 @@ export interface CalendarToolbarControls {
   showPreviousDay: () => void;
   showNextDay: () => void;
   showToday: () => void;
+  selectDate: (date: Date) => void;
 }
 
 interface CalendarToolbarStore extends CalendarToolbarControls {
@@ -24,6 +25,7 @@ const EMPTY_CONTROLS: CalendarToolbarControls = {
   showPreviousDay: () => undefined,
   showNextDay: () => undefined,
   showToday: () => undefined,
+  selectDate: () => undefined,
 };
 
 /** Bridge route-local calendar controls into the persistent app sidebar. */

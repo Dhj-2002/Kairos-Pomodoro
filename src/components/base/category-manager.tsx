@@ -85,8 +85,9 @@ function TagColorPalette({
   onChange: (color: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2" aria-label="Tag color">
-      {CATEGORY_PRESET_COLORS.map((color) => (
+    <div aria-label="Tag color" className="tag-palette">
+      <p>Calendar colors</p>
+      <div className="flex flex-wrap gap-2">{CATEGORY_PRESET_COLORS.slice(0,7).map((color) => (
         <button
           key={color}
           type="button"
@@ -98,7 +99,10 @@ function TagColorPalette({
           )}
           style={{ backgroundColor: color }}
         />
-      ))}
+      ))}</div>
+      <p className="legacy-palette-heading">Classic colors</p>
+      <div className="flex flex-wrap gap-2">{CATEGORY_PRESET_COLORS.slice(7).map(color => <button key={color} type="button" aria-label={`Use tag color ${color}`} onClick={() => onChange(color)} className="size-6 rounded-full border-2" style={{backgroundColor:color,borderColor:value===color ? "currentColor" : "transparent"}} />)}</div>
+      <label className="custom-tag-color">Custom color<input aria-label="Custom tag color" type="color" value={value} onChange={e=>onChange(e.target.value)} /></label>
     </div>
   );
 }

@@ -6,11 +6,11 @@ import {
 
 describe("calendar block visual density", () => {
   it("keeps 15-minute blocks usable and halves the 30-minute visual gap", () => {
-    expect(getCalendarBlockVisualInset(16)).toBe(0.25);
-    expect(16 - getCalendarBlockVisualInset(16) * 2).toBe(15.5);
+    expect(getCalendarBlockVisualInset(12.5)).toBe(0.25);
+    expect(12.5 - getCalendarBlockVisualInset(12.5) * 2).toBe(12);
 
-    expect(getCalendarBlockVisualInset(32)).toBe(0.75);
-    expect(32 - getCalendarBlockVisualInset(32) * 2).toBe(30.5);
+    expect(getCalendarBlockVisualInset(25)).toBe(0.75);
+    expect(25 - getCalendarBlockVisualInset(25) * 2).toBe(23.5);
   });
 
   it("caps long-block breathing room instead of scaling away duration", () => {

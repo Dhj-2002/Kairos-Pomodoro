@@ -97,7 +97,7 @@ export function CalendarTimeBlock({
   // visual segment, so every segment changes state together after completion.
   const color = resolveScheduleBlockColor(block);
   const label = block.title || block.task_name || block.category_name || "Focus block";
-  const isShort = heightPx < 56;
+  const isShort = heightPx < 40;
   const isQuarterHour = heightPx <= MIN_BLOCK_HEIGHT;
   const visualInsetY = getCalendarBlockVisualInset(heightPx);
   const isElapsed = isCalendarBlockElapsed(block.end_time);
@@ -200,7 +200,7 @@ export function CalendarTimeBlock({
     >
       <div
         className={cn(
-          "calendar-event w-full rounded-[2px] px-2 flex flex-col justify-center overflow-hidden",
+          "calendar-event w-full rounded-[2px] px-2 flex flex-col justify-start overflow-hidden",
           continuesBefore && "rounded-t-none",
           continuesAfter && "rounded-b-none",
           isQuarterHour ? "py-0" : "py-1",
@@ -214,20 +214,21 @@ export function CalendarTimeBlock({
           ...calendarEventStyle(color, isElapsed),
         }}
       >
-        <div className="flex h-full w-full min-h-0 items-center gap-1.5">
+        <div className="flex h-full w-full min-h-0 items-start gap-1.5">
           <div className="min-w-0 flex-1 text-left">
             <p className={cn(
-              "truncate text-left text-[11px] font-bold leading-tight",
+              "calendar-event-title truncate text-left text-[13px] font-medium leading-tight",
+              isQuarterHour && "calendar-event-title-quarter",
               "text-inherit",
             )}>
               {label}
             </p>
             {!isShort && (
               <p className={cn(
-                "mt-0.5 text-left text-[9px] tabular-nums",
+                "calendar-event-time mt-1 text-left text-[12px] tabular-nums",
                 "text-inherit",
               )}>
-                {displayStart && displayEnd
+                {continuesBefore || continuesAfter ? formatRange(block.start_time, block.end_time) : displayStart && displayEnd
                   ? formatDisplayRange(displayStart, displayEnd)
                   : formatRange(block.start_time, block.end_time)}
               </p>
