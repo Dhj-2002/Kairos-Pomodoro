@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { DurationPresets } from "./duration-presets";
+import type { DurationPreset } from "@/features/schedule/duration-presets";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
@@ -17,6 +19,7 @@ interface TimeBlockFormProps {
   /** Default date for a new block (click-to-create). */
   defaultDate?: Date | null;
   onSubmit: (input: TimeBlockInput) => Promise<void>;
+  inspector?: boolean;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -27,11 +30,38 @@ export function toLocalInput(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function addLocalMinutes(value: string, minutes: number): string {
+export function addLocalMinutes(value: string, minutes: number): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   date.setMinutes(date.getMinutes() + minutes);
   return toLocalInput(date);
+}
+
+/** One form subtree: dock at wide widths, use the existing modal on narrow screens. */
+function FormPresentation({ open, onClose, inspector, children }: {
+  open: boolean; onClose: () => void; inspector: boolean; children: ReactNode;
+}) {
+  // 1. React to resizing without changing the parent form's draft state.
+  const [wide, setWide] = useState(() => window.matchMedia("(min-width: 1280px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px)");
+    const update = () => setWide(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!open || !inspector || !wide) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [open, inspector, wide, onClose]);
+  // 2. Only the presentation changes; save/validation stays in TimeBlockForm.
+  if (!open) return null;
+  if (inspector && wide) return <aside aria-label="Schedule block editor" className="calendar-inspector w-[320px] shrink-0 min-h-0 overflow-y-auto border-l border-sahara-border/30 bg-sahara-surface">
+    <div className="flex justify-end px-4 pt-3"><button type="button" aria-label="Close editor" onClick={onClose}>✕</button></div>
+    {children}
+  </aside>;
+  return <ModalOverlay open={open} onClose={onClose} showCloseButton><div className="calendar-editor">{children}</div></ModalOverlay>;
 }
 
 /** Default to a short focus block after a newly selected start time. */
@@ -81,6 +111,7 @@ export function TimeBlockForm({
   block,
   defaultDate,
   onSubmit,
+  inspector = false,
 }: TimeBlockFormProps) {
   const isEdit = !!block;
   const categories = useCategoriesStore((s) => s.categories);
@@ -96,6 +127,7 @@ export function TimeBlockForm({
   const [notificationEnabled, setNotificationEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activePreset, setActivePreset] = useState<DurationPreset | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -103,6 +135,8 @@ export function TimeBlockForm({
       return;
     }
     loadCategories();
+    setActivePreset(null);
+    setError(null);
 
     if (block) {
       setTitle(block.title ?? "");
@@ -179,6 +213,10 @@ export function TimeBlockForm({
   const handleStartChange = (nextStart: string) => {
     setStart(nextStart);
     setError(null);
+    if (activePreset && nextStart) {
+      setEnd(addLocalMinutes(nextStart, activePreset.minutes));
+      return;
+    }
 
     // If the user moves the start past the existing end, keep the form
     // immediately usable by carrying the default focus duration forward.
@@ -196,7 +234,7 @@ export function TimeBlockForm({
 
   return (
     <>
-      <ModalOverlay open={open} onClose={onClose} showCloseButton>
+      <FormPresentation open={open} onClose={() => { if (!saving && !showTagManager) onClose(); }} inspector={inspector}>
       <div className="px-6 py-5 border-b border-sahara-border/20">
         <h2 className="font-serif text-xl text-sahara-text">
           {isEdit ? "Edit Schedule Block" : "Add Schedule Block"}
@@ -222,7 +260,7 @@ export function TimeBlockForm({
         </div>
 
         {/* Time range */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="calendar-time-inputs grid grid-cols-2 gap-3">
           <div>
             <label className="text-[10px] font-bold text-sahara-text-muted uppercase tracking-widest">
               Start
@@ -244,6 +282,7 @@ export function TimeBlockForm({
               min={start ? getMinimumEnd(start) : undefined}
               onChange={(e) => {
                 setEnd(e.target.value);
+                setActivePreset(null);
                 setError(null);
               }}
               className="w-full mt-2 px-4 py-3 rounded-xl border border-sahara-border/30 bg-sahara-bg/40 text-sm font-medium text-sahara-text focus:outline-none focus:border-sahara-primary/50 focus:ring-2 focus:ring-sahara-primary/10 transition-all"
@@ -251,10 +290,14 @@ export function TimeBlockForm({
           </div>
         </div>
 
+        {open && <DurationPresets activeId={activePreset?.id ?? null}
+          onChange={() => setActivePreset(null)}
+          onSelect={(preset) => { setActivePreset(preset); setEnd(addLocalMinutes(start, preset.minutes)); setError(null); }} />}
+
         <label className="flex items-center justify-between gap-4 rounded-xl border border-sahara-border/20 bg-sahara-bg/30 px-4 py-3">
           <span>
             <span className="block text-xs font-semibold text-sahara-text">Start reminder</span>
-            <span className="block text-[10px] text-sahara-text-muted">Play a sound and show a Windows notification.</span>
+            <span className="block text-[10px] text-sahara-text-muted">Play a sound and show a desktop notification.</span>
           </span>
           <input
             type="checkbox"
@@ -347,6 +390,7 @@ export function TimeBlockForm({
           intent="default"
           size="sm"
           onClick={onClose}
+          disabled={saving}
           className="text-[11px]"
         >
           Cancel
@@ -362,7 +406,7 @@ export function TimeBlockForm({
           {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Block"}
         </Button>
       </div>
-      </ModalOverlay>
+      </FormPresentation>
       <CategoryManager
         open={showTagManager}
         onClose={() => setShowTagManager(false)}

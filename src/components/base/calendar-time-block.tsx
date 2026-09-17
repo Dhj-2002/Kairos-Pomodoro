@@ -7,6 +7,7 @@ import type { TimeBlockWithMeta } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { MIN_BLOCK_HEIGHT } from "./calendar-grid";
 import { resolveScheduleBlockColor } from "@/features/schedule/schedule-block-color";
+import { calendarEventStyle } from "@/features/schedule/calendar-appearance";
 import { formatTime24Hour, parseDbDateTime } from "@/lib/time";
 import type { CalendarResizeEdge } from "@/features/schedule/calendar-resize";
 
@@ -199,43 +200,32 @@ export function CalendarTimeBlock({
     >
       <div
         className={cn(
-          "w-full rounded-lg border-2 px-2 flex flex-col justify-center overflow-hidden transition-all hover:shadow-md",
-          continuesBefore && "rounded-t-none border-t-0",
-          continuesAfter && "rounded-b-none border-b-0",
+          "calendar-event w-full rounded-[2px] px-2 flex flex-col justify-center overflow-hidden",
+          continuesBefore && "rounded-t-none",
+          continuesAfter && "rounded-b-none",
           isQuarterHour ? "py-0" : "py-1",
-          isSelected
-            ? "shadow-lg"
-            : "backdrop-blur-sm",
+          isSelected && "calendar-event-selected",
         )}
         style={{
           // calendar block step 3: Insets create separation without changing
           // the outer top/height used by drag, resize, and time-grid accuracy.
           height: `calc(100% - ${visualInsetY * 2}px)`,
           marginTop: visualInsetY,
-          borderColor: color,
-          background: isSelected
-            ? `color-mix(in srgb, ${color} 68%, #111827 32%)`
-            : isElapsed
-              ? "transparent"
-              : `color-mix(in srgb, ${color} 13%, transparent)`,
+          ...calendarEventStyle(color, isElapsed),
         }}
       >
         <div className="flex h-full w-full min-h-0 items-center gap-1.5">
-          <span
-            className="size-2 shrink-0 rounded-full"
-            style={{ backgroundColor: isSelected ? "white" : color }}
-          />
           <div className="min-w-0 flex-1 text-left">
             <p className={cn(
               "truncate text-left text-[11px] font-bold leading-tight",
-              isSelected ? "text-white" : "text-sahara-text",
+              "text-inherit",
             )}>
               {label}
             </p>
             {!isShort && (
               <p className={cn(
                 "mt-0.5 text-left text-[9px] tabular-nums",
-                isSelected ? "text-white/75" : "text-sahara-text-muted",
+                "text-inherit",
               )}>
                 {displayStart && displayEnd
                   ? formatDisplayRange(displayStart, displayEnd)

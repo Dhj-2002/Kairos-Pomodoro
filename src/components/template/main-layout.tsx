@@ -9,14 +9,15 @@ import { MobileNav } from "./mobile-nav";
 
 interface MainLayoutProps {
   children: ReactNode;
+  calendarAppearance?: boolean;
 }
 
-export function MainLayout({ children }: MainLayoutProps) {
+export function MainLayout({ children, calendarAppearance = false }: MainLayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const isFullscreenFocus = useUIStore((s) => s.isFullscreenFocus);
 
   return (
-    <div className="flex h-screen bg-sahara-bg text-sahara-text font-sans overflow-hidden">
+    <div className={cn("flex h-screen bg-sahara-bg text-sahara-text font-sans overflow-hidden", calendarAppearance && "calendar-appearance")}>
       <Sidebar
         isCollapsed={isCollapsed}
         isFullscreenFocus={isFullscreenFocus}

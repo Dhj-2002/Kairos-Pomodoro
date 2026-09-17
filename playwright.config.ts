@@ -15,11 +15,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { browserName: "chromium" },
+      use: { browserName: "chromium", channel: process.env.PW_CHANNEL || undefined },
     },
+    { name: "webkit", use: { browserName: "webkit" } },
   ],
   webServer: {
-    command: "E2E=true bun run dev",
+    command: "bun --bun vite",
+    env: { E2E: "true" },
     url: "http://localhost:1420",
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

@@ -23,7 +23,7 @@ export default defineConfig(async () => ({
               return [
                 {
                   tag: "script",
-                  children: "window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};",
+                  children: "window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } }, invoke: async (cmd) => cmd.includes('get_all') ? [] : null, transformCallback: () => 0 };",
                   injectTo: "head-prepend" as const,
                 },
               ];
@@ -32,6 +32,8 @@ export default defineConfig(async () => ({
         ]
       : []),
   ],
+  // Scan the application only, not archived transfers or native build HTML.
+  optimizeDeps: { entries: ["index.html"] },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

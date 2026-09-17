@@ -1,5 +1,59 @@
 @import "tailwindcss";
 
+/* Calendar-only appearance: never rewrite persisted themes or tag colors. */
+.calendar-appearance, .calendar-editor {
+  --color-sahara-primary: var(--c-primary);
+  --color-sahara-on-primary: var(--c-on-primary);
+  --color-sahara-primary-light: var(--c-primary-light);
+  --color-sahara-bg: var(--c-bg);
+  --color-sahara-surface: var(--c-surface);
+  --color-sahara-card: var(--c-card);
+  --color-sahara-text: var(--c-text);
+  --color-sahara-text-secondary: var(--c-text-secondary);
+  --color-sahara-text-muted: var(--c-text-muted);
+  --color-sahara-border: var(--c-border);
+  --c-primary: #d95b58;
+  --c-on-primary: #ffffff;
+  --c-primary-light: #fff0ef;
+  --c-bg: #ffffff;
+  --c-surface: #ffffff;
+  --c-card: #f5f5f7;
+  --c-text: #29292d;
+  --c-text-secondary: #5e5e65;
+  --c-text-muted: #73737b;
+  --c-border: #c5c5cd;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.dark .calendar-appearance, .dark .calendar-editor {
+  --c-primary: #ff8d88;
+  --c-primary-light: #392527;
+  --c-bg: #1c1c1e;
+  --c-surface: #1c1c1e;
+  --c-card: #29292d;
+  --c-text: #f2f2f7;
+  --c-text-secondary: #c4c4cc;
+  --c-text-muted: #aaaab3;
+  --c-border: #62626b;
+}
+.calendar-appearance .font-serif, .calendar-editor .font-serif { font-family: inherit; }
+.calendar-event { color: var(--event-ink); background: var(--event-fill); border: 0; border-left: 2px solid var(--event-accent); }
+.dark .calendar-event { color: var(--event-dark-ink); background: var(--event-dark-fill); }
+.calendar-event:hover { filter: brightness(0.98); }
+.calendar-session * { color: inherit; }
+.calendar-event-selected { outline: 1px solid var(--event-accent); outline-offset: -1px; }
+[data-calendar-block-id]:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
+.calendar-inspector .calendar-time-inputs { grid-template-columns: minmax(0, 1fr); }
+.calendar-inspector input, .calendar-editor input { min-width: 0; }
+.calendar-inspector h2, .calendar-editor h2 { font-family: inherit; font-size: 17px; font-weight: 600; }
+.calendar-inspector .rounded-xl, .calendar-editor .rounded-xl { border-radius: 6px; }
+.calendar-appearance aside { background: var(--c-card); }
+.calendar-appearance .calendar-inspector { background: var(--c-surface); }
+.calendar-appearance .calendar-quarter-guide { opacity: 0; }
+.calendar-appearance .calendar-grid [class*="border-sahara-border"] { border-color: #ededf0; }
+.dark .calendar-appearance .calendar-grid [class*="border-sahara-border"] { border-color: #36363c; }
+.calendar-appearance nav button { border: 0; box-shadow: none; border-radius: 6px; }
+.calendar-appearance nav button span { text-transform: none; letter-spacing: normal; font-weight: 500; font-size: 13px; }
+
 /* ============================================================================
    Theme tokens (Tailwind v4 runtime theming via indirection)
 

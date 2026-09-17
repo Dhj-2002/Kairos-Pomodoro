@@ -10,6 +10,24 @@ const tables = new Map<string, Map<number, Row>>();
 const autoInc = new Map<string, number>();
 const columnDefaults = new Map<string, Map<string, unknown>>();
 
+/** Isolated browser fixture; never used by the native SQL plugin. */
+export function seedCalendarAppearance() {
+  const rows = getTable("time_blocks");
+  const fixtures = [
+    [9001, "Completed research", "2026-09-16 09:00:00", "2026-09-16 11:00:00", "#408ac9"],
+    [9002, "Upcoming research", "2026-09-17 10:00:00", "2026-09-17 12:00:00", "#408ac9"],
+    [9003, "Reading", "2026-09-18 09:00:00", "2026-09-18 11:00:00", "#6d9c45"],
+    [9004, "Writing", "2026-09-19 09:00:00", "2026-09-19 11:00:00", "#b95b87"],
+    [9005, "Planning", "2026-09-20 09:00:00", "2026-09-20 11:00:00", "#ba8b35"],
+  ];
+  for (const [id, title, start_time, end_time, color] of fixtures) rows.set(Number(id), {
+    id: Number(id), title, start_time, end_time, category_id: 99,
+    category_color: color, category_name: "Preview", completed: 0,
+    notification_enabled: 0, task_id: null, session_id: null, deleted_at: null,
+  });
+}
+(globalThis as unknown as { __seedCalendarAppearance: () => void }).__seedCalendarAppearance = seedCalendarAppearance;
+
 (function seedDefaults() {
   const settings = getTable("settings");
   autoInc.set("settings", 1);
@@ -138,6 +156,10 @@ export class Database {
 
     if (up.startsWith("INSERT")) {
       const tbl = getTable(name);
+      if (name === "settings" && up.includes("ON CONFLICT")) {
+        const existing = [...tbl.values()].find((row) => row.key === params[0]);
+        if (existing) { existing.value = params[1]; return { lastInsertId: existing.id, rowsAffected: 1 }; }
+      }
       const id = (autoInc.get(name) || 0) + 1;
       autoInc.set(name, id);
       const row: Row = { id };
@@ -254,6 +276,9 @@ export class Database {
       const vrow = Array.from(tbl.values()).find((r) => r.key === "version");
       return (vrow ? [{ value: vrow.value }] : []) as T[];
     }
+
+    // Grouped aggregates over an empty fixture produce no groups, not a fabricated count row.
+    if (up.includes("GROUP BY") && allRows(name).length === 0) return [] as T[];
 
     if (up.includes("COUNT(*)")) {
       const countCol = (sql.match(/COUNT\(\*\)\s+AS\s+(\w+)/i) || [])[1] ?? "count";

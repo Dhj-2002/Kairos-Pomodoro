@@ -517,9 +517,9 @@ export function CalendarDashboard() {
   }
 
   return (
-    <div className="px-3 sm:px-5 md:px-6 pt-1 pb-4 max-w-7xl mx-auto h-full min-h-0 flex flex-col">
+    <div className="calendar-workspace px-3 md:px-4 pt-1 pb-4 mx-auto h-full min-h-0 flex flex-row">
       {/* Calendar grid: one empty-slot click opens the shared insertion menu. */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-w-0 min-h-0 overflow-auto">
         <CalendarGrid
           sessions={data.sessions}
           timeBlocks={data.timeBlocks}
@@ -541,6 +541,7 @@ export function CalendarDashboard() {
 
       {/* Time block form (create / edit) */}
       <TimeBlockForm
+        inspector
         open={formOpen}
         onClose={() => setFormOpen(false)}
         block={editingBlock}

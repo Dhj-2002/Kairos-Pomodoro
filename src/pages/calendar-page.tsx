@@ -3,7 +3,7 @@ import { CalendarDashboard } from "@/components/containers/calendar";
 
 export function CalendarPage() {
   return (
-    <MainLayout>
+    <MainLayout calendarAppearance>
       <CalendarDashboard />
     </MainLayout>
   );

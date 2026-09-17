@@ -2,6 +2,8 @@ import { Clock, CheckCircle2, Circle, Tag } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { WeekSession } from "@/lib/db";
 import { formatTimeAmPm, parseDbDateTime } from "@/lib/time";
+import { calendarEventStyle } from "@/features/schedule/calendar-appearance";
+import { UNTAGGED_BLOCK_COLOR } from "@/lib/constants";
 
 interface CalendarSessionBlockProps {
   session: WeekSession;
@@ -37,22 +39,17 @@ export function CalendarSessionBlock({
 
   const catColor = session.category_color || undefined;
 
-  const bgColor = isWork && catColor ? catColor : undefined;
-  const borderColor = isWork && catColor ? hexToRgba(catColor, 0.6) : undefined;
+  const elapsed = parseDbDateTime(session.started_at).getTime() + session.duration_sec * 1000 <= Date.now();
 
   return (
     <div
       className={cn(
-        "absolute left-1 right-1 md:left-1.5 md:right-1.5 rounded-lg md:rounded-xl px-2.5 py-1.5 md:px-3 md:py-2.5 shadow-sm border cursor-pointer z-10 overflow-hidden group transition-shadow hover:shadow-md flex flex-col",
-        isWork
-          ? "text-white"
-          : "bg-sahara-card text-sahara-text border-sahara-border",
+        "calendar-event calendar-session absolute left-1 right-1 md:left-1.5 md:right-1.5 rounded-[2px] px-2 py-1 z-10 overflow-hidden group flex flex-col",
       )}
       style={{
         top: topPx,
         height: heightPx,
-        ...(bgColor && { backgroundColor: bgColor }),
-        ...(borderColor && { borderColor }),
+        ...calendarEventStyle(catColor || UNTAGGED_BLOCK_COLOR, elapsed),
       }}
     >
       {/* Type Label */}
@@ -108,7 +105,7 @@ export function CalendarSessionBlock({
               catColor
                 ? {
                     backgroundColor: hexToRgba(catColor, 0.25),
-                    color: "#fff",
+                    color: "inherit",
                   }
                 : undefined
             }

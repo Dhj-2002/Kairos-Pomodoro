@@ -140,7 +140,7 @@ function QuarterHourGuides() {
       {[25, 50, 75].map((top) => (
         <span
           key={top}
-          className="absolute left-0 right-0 border-t border-dashed border-sahara-border/15"
+          className="calendar-quarter-guide absolute left-0 right-0 border-t border-dashed border-sahara-border/15"
           style={{ top: `${top}%` }}
         />
       ))}
@@ -1082,7 +1082,7 @@ function CalendarDesktopView({
           const dayIdx = day.getDay() === 0 ? 6 : day.getDay() - 1;
           const today = isToday(day);
           return (
-            <div key={day.toDateString()} className={cn("px-2 pt-3 pb-2 text-center border-r last:border-r-0 border-sahara-border/20 relative", today && "bg-sahara-primary-light/20")}>
+            <div key={day.toDateString()} className="px-2 pt-3 pb-2 text-center border-r last:border-r-0 border-sahara-border/20 relative">
               <span className={cn("text-[10px] font-medium tracking-[0.15em] block mb-0.5", today ? "text-sahara-primary" : "text-sahara-text-muted")}>{DAY_LABELS_FULL[dayIdx]}</span>
               <p className={cn("font-serif text-2xl leading-none", today ? "text-sahara-primary font-bold" : "text-sahara-text")}>{day.getDate()}</p>
               {today && <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-sahara-primary rounded-full" />}
@@ -1114,7 +1114,7 @@ function CalendarDesktopView({
                 key={day.toDateString()}
                 className={cn(
                   "relative border-r last:border-r-0 border-sahara-border/15 cursor-pointer",
-                  today && "bg-sahara-primary-light/30",
+                  today && "calendar-today-column",
                 )}
                 style={{ minHeight: layout.totalHeight }}
                 onPointerDown={handleMarqueeStart}
@@ -1383,7 +1383,7 @@ export function CalendarGrid({
   );
 
   return (
-    <div className="bg-sahara-surface rounded-2xl overflow-hidden shadow-sm border border-sahara-border/40 flex flex-col min-h-full">
+    <div className="calendar-grid bg-sahara-surface overflow-hidden flex flex-col min-h-full">
       <CalendarMobileView
         weekDays={weekDays}
         allDayLayouts={allDayLayouts}
